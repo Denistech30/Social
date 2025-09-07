@@ -64,8 +64,8 @@ A modern, feature-rich Progressive Web App (PWA) for creating engaging social me
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/social-text-formatter.git
-cd social-text-formatter
+git clone https://github.com/Denistech30/Social.git
+cd Social
 ```
 
 2. **Install dependencies**
