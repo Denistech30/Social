@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Media Text Formatter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+        }
+
+        .editor-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .editor-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .input-section, .output-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            border: 2px solid #e9ecef;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .output-text {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            background: white;
+            font-family: 'Arial', sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .format-guide {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .guide-title {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 8px;
+        }
+
+        .guide-examples {
+            font-family: monospace;
+            font-size: 13px;
+            color: #424242;
+        }
+
+        .guide-examples div {
+            margin-bottom: 3px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .copy-feedback {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .copy-feedback.show {
+            transform: translateX(0);
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Social Text Formatter</h1>
+        <p class="subtitle">Format your text for Facebook, LinkedIn, TikTok, Instagram, X, and more!</p>
+        
+        <div class="format-guide">
+            <div class="guide-title">Formatting Guide:</div>
+            <div class="guide-examples">
+                <div>**bold text** → 𝐛𝐨𝐥𝐝 𝐭𝐞𝐱𝐭</div>
+                <div>*italic text* → 𝘪𝘵𝘢𝘭𝘪𝘤 𝘵𝘦𝘹𝘵</div>
+                <div>### Heading → 𝗛𝗲𝗮𝗱𝗶𝗻𝗴</div>
+                <div>~~strikethrough~~ → s̶t̶r̶i̶k̶e̶t̶h̶r̶o̶u̶g̶h̶</div>
+            </div>
+        </div>
+
+        <div class="editor-container">
+            <div class="input-section">
+                <div class="section-title">
+                    <div class="icon">✏️</div>
+                    Input Text (Markdown)
+                </div>
+                <textarea id="inputText" placeholder="Type your text here using markdown formatting...
+
+Examples:
+### My Awesome Post
+
+🔥 **This is bold text**
+*This is italic text*
+~~This is strikethrough~~
+
+Ready to share!"></textarea>
+                <div class="char-counter" id="inputCounter">0 characters</div>
+            </div>
+
+            <div class="output-section">
+                <div class="section-title">
+                    <div class="icon">📱</div>
+                    Social Media Ready
+                </div>
+                <div class="output-text" id="outputText">Your formatted text will appear here...</div>
+                <div class="char-counter" id="outputCounter">0 characters</div>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn btn-primary" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+            <button class="btn btn-secondary" onclick="clearAll()">🗑️ Clear All</button>
+        </div>
+    </div>
+
+    <div class="copy-feedback" id="copyFeedback">
+        ✅ Text copied to clipboard!
+    </div>
+
+    <script>
+        // Unicode character maps for styling
+        const boldMap = {
+            'A': '𝐀', 'B': '𝐁', 'C': '𝐂', 'D': '𝐃', 'E': '𝐄', 'F': '𝐅', 'G': '𝐆', 'H': '𝐇', 'I': '𝐈', 'J': '𝐉', 'K': '𝐊', 'L': '𝐋', 'M': '𝐌', 'N': '𝐍', 'O': '𝐎', 'P': '𝐏', 'Q': '𝐐', 'R': '𝐑', 'S': '𝐒', 'T': '𝐓', 'U': '𝐔', 'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙',
+            'a': '𝐚', 'b': '𝐛', 'c': '𝐜', 'd': '𝐝', 'e': '𝐞', 'f': '𝐟', 'g': '𝐠', 'h': '𝐡', 'i': '𝐢', 'j': '𝐣', 'k': '𝐤', 'l': '𝐥', 'm': '𝐦', 'n': '𝐧', 'o': '𝐨', 'p': '𝐩', 'q': '𝐪', 'r': '𝐫', 's': '𝐬', 't': '𝐭', 'u': '𝐮', 'v': '𝐯', 'w': '𝐰', 'x': '𝐱', 'y': '𝐲', 'z': '𝐳',
+            '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'
+        };
+
+        const italicMap = {
+            'A': '𝐴', 'B': '𝐵', 'C': '𝐶', 'D': '𝐷', 'E': '𝐸', 'F': '𝐹', 'G': '𝐺', 'H': '𝐻', 'I': '𝐼', 'J': '𝐽', 'K': '𝐾', 'L': '𝐿', 'M': '𝑀', 'N': '𝑁', 'O': '𝑂', 'P': '𝑃', 'Q': '𝑄', 'R': '𝑅', 'S': '𝑆', 'T': '𝑇', 'U': '𝑈', 'V': '𝑉', 'W': '𝑊', 'X': '𝑋', 'Y': '𝑌', 'Z': '𝑍',
+            'a': '𝘢', 'b': '𝘣', 'c': '𝘤', 'd': '𝘥', 'e': '𝘦', 'f': '𝘧', 'g': '𝘨', 'h': '𝘩', 'i': '𝘪', 'j': '𝘫', 'k': '𝘬', 'l': '𝘭', 'm': '𝘮', 'n': '𝘯', 'o': '𝘰', 'p': '𝘱', 'q': '𝘲', 'r': '𝘳', 's': '𝘴', 't': '𝘵', 'u': '𝘶', 'v': '𝘷', 'w': '𝘸', 'x': '𝘹', 'y': '𝘺', 'z': '𝘻'
+        };
+
+        function convertToBold(text) {
+            return text.split('').map(char => boldMap[char] || char).join('');
+        }
+
+        function convertToItalic(text) {
+            return text.split('').map(char => italicMap[char] || char).join('');
+        }
+
+        function addStrikethrough(text) {
+            return text.split('').map(char => char + '\u0336').join('');
+        }
+
+        function formatText(input) {
+            let output = input;
+
+            // Convert headings (### text)
+            output = output.replace(/^### (.+)$/gm, (match, text) => {
+                return convertToBold(text.toUpperCase());
+            });
+
+            // Convert bold (**text**)
+            output = output.replace(/\*\*(.+?)\*\*/g, (match, text) => {
+                return convertToBold(text);
+            });
+
+            // Convert italic (*text*)
+            output = output.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, (match, text) => {
+                return convertToItalic(text);
+            });
+
+            // Convert strikethrough (~~text~~)
+            output = output.replace(/~~(.+?)~~/g, (match, text) => {
+                return addStrikethrough(text);
+            });
+
+            return output;
+        }
+
+        function updateOutput() {
+            const input = document.getElementById('inputText').value;
+            const output = formatText(input);
+            document.getElementById('outputText').textContent = output;
+            
+            // Update character counters
+            document.getElementById('inputCounter').textContent = `${input.length} characters`;
+            document.getElementById('outputCounter').textContent = `${output.length} characters`;
+        }
+
+        function copyToClipboard() {
+            const outputText = document.getElementById('outputText').textContent;
+            if (!outputText || outputText === 'Your formatted text will appear here...') {
+                alert('Please enter some text to format first!');
+                return;
+            }
+
+            navigator.clipboard.writeText(outputText).then(() => {
+                const feedback = document.getElementById('copyFeedback');
+                feedback.classList.add('show');
+                setTimeout(() => {
+                    feedback.classList.remove('show');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                alert('Failed to copy text to clipboard');
+            });
+        }
+
+        function clearAll() {
+            document.getElementById('inputText').value = '';
+            document.getElementById('outputText').textContent = 'Your formatted text will appear here...';
+            document.getElementById('inputCounter').textContent = '0 characters';
+            document.getElementById('outputCounter').textContent = '0 characters';
+        }
+
+        // Add event listener for real-time formatting
+        document.getElementById('inputText').addEventListener('input', updateOutput);
+
+        // Initialize
+        updateOutput();
+    </script>
+</body>
+</html>
