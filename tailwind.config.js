@@ -48,6 +48,22 @@ module.exports = {
         sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["Monaco", "Menlo", "Ubuntu Mono", "monospace"],
       },
+      animation: {
+        shimmer: 'shimmer 2s infinite',
+      },
+      keyframes: {
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+      },
+      backgroundSize: {
+        '200': '200% auto',
+      },
+      backgroundPosition: {
+        '0': '0% center',
+        '100': '100% center',
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

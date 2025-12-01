@@ -9,9 +9,12 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+        globPatterns: ['**/*.{js,css,html,ico,svg}'],
+        // Exclude large PNG files from precaching, they'll be cached on demand
+        globIgnores: ['**/icon-512.png'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
       },
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'TextCraft',
         short_name: 'TextCraft',

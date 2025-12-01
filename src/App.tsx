@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import HeroSection from './components/hero/HeroSection';
+import StatsBar from './components/hero/StatsBar';
+import FeaturesSection from './components/features/FeaturesSection';
 import MainLayout from './components/layout/MainLayout';
 import InputSection from './components/input/InputSection';
 import PreviewSection from './components/preview/PreviewSection';
@@ -15,9 +18,24 @@ import { useResponsive } from './hooks/useResponsive';
 import type { Draft, FormatType, TextSelection, StyleType, Platform } from './types';
 import './App.css';
 
+// Demo text to show on initial load
+const DEMO_TEXT = `# Welcome to TextCraft! 🎨
+
+Transform your social media posts with **bold**, *italic*, and ~~strikethrough~~ formatting.
+
+## Why TextCraft?
+- Works on all platforms (Twitter, LinkedIn, Instagram)
+- No signup required
+- 100% free forever
+- Accessibility-friendly
+
+Try editing this text or click "Clear" to start fresh!
+
+**Pro tip:** Select text and use the toolbar to apply formatting instantly.`;
+
 function App() {
-  // Core state
-  const [inputText, setInputText] = useState('');
+  // Core state - Initialize with demo text
+  const [inputText, setInputText] = useState(DEMO_TEXT);
   const [formattedText, setFormattedText] = useState('');
   const [selectedPlatformId, setSelectedPlatformId] = useState(platforms[0].id);
   const [selection, setSelection] = useState<TextSelection>({ start: 0, end: 0, text: '' });
@@ -50,14 +68,14 @@ function App() {
     return () => clearTimeout(timer);
   }, [inputText]);
 
-  // Track unsaved changes
+  // Track unsaved changes (but not for demo text)
   useEffect(() => {
-    setHasUnsavedChanges(inputText.trim().length > 0);
+    setHasUnsavedChanges(inputText.trim().length > 0 && inputText !== DEMO_TEXT);
   }, [inputText]);
 
   // Auto-save functionality
   const handleAutoSave = useCallback(() => {
-    if (inputText.trim().length > 0) {
+    if (inputText.trim().length > 0 && inputText !== DEMO_TEXT) {
       addDraft(inputText, selectedPlatformId, formattedText);
       showToastMessage('Draft auto-saved', 'success');
     }
@@ -65,9 +83,9 @@ function App() {
 
   useAutoSave({
     onSave: handleAutoSave,
-    delay: 30000, // Save every 30 seconds (not 10)
+    delay: 30000,
     enabled: hasUnsavedChanges,
-    content: inputText, // Track actual content changes
+    content: inputText,
   });
 
   // Warn before leaving with unsaved changes
@@ -241,13 +259,9 @@ function App() {
 
   // Clear all
   const handleClear = () => {
-    if (inputText.trim().length === 0) return;
-    
-    if (confirm('Are you sure you want to clear all text?')) {
-      setInputText('');
-      setFormattedText('');
-      setHasUnsavedChanges(false);
-    }
+    setInputText('');
+    setFormattedText('');
+    setHasUnsavedChanges(false);
   };
 
   // Load draft
@@ -303,11 +317,23 @@ function App() {
 
   return (
     <>
-      <MainLayout
-        inputSection={inputSection}
-        previewSection={previewSection}
-        onOpenDrafts={() => setShowDrafts(true)}
-      />
+      {/* Hero Section */}
+      <HeroSection />
+      
+      {/* Stats Bar */}
+      <StatsBar />
+      
+      {/* Features Section */}
+      <FeaturesSection />
+
+      {/* Main Tool */}
+      <div id="main-tool">
+        <MainLayout
+          inputSection={inputSection}
+          previewSection={previewSection}
+          onOpenDrafts={() => setShowDrafts(true)}
+        />
+      </div>
 
       {/* Mobile Formatting Toolbar */}
       {isMobile && (

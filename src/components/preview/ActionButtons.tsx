@@ -47,25 +47,33 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
 
   return (
     <div className="space-y-3">
-      {/* Primary Copy Button */}
+      {/* Primary Copy Button - Enhanced with shimmer effect */}
       <button
         onClick={() => handleCopy('unicode')}
         disabled={!text}
-        className={`w-full h-12 px-6 rounded-xl font-semibold text-white flex items-center justify-center gap-2 transition-all duration-200 shadow-lg ${
+        className={`group relative w-full h-14 px-8 rounded-xl font-bold text-white text-lg flex items-center justify-center gap-3 transition-all duration-300 overflow-hidden ${
           copied 
-            ? 'bg-green-600 hover:bg-green-700 shadow-green-500/30' 
-            : 'bg-green-500 hover:bg-green-600 shadow-green-500/30 active:scale-95'
-        } disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none`}
+            ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/50' 
+            : 'bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 shadow-lg shadow-green-500/40 hover:shadow-xl hover:shadow-green-500/50 hover:scale-105 active:scale-95'
+        } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none`}
+        style={{ backgroundSize: '200% auto' }}
         type="button"
       >
+        {/* Shimmer effect overlay */}
+        {!copied && text && (
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+          </div>
+        )}
+        
         {copied ? (
           <>
-            <Check className="w-5 h-5" />
-            <span>Copied!</span>
+            <Check className="w-6 h-6 animate-bounce" />
+            <span>Copied Successfully!</span>
           </>
         ) : (
           <>
-            <Copy className="w-5 h-5" />
+            <Copy className="w-6 h-6 group-hover:rotate-12 transition-transform duration-200" />
             <span>Copy Formatted Text</span>
           </>
         )}
