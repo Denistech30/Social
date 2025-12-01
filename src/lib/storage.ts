@@ -1,20 +1,41 @@
 import type { Draft } from '../types';
 
-const STORAGE_KEY = 'social-formatter-drafts';
+const STORAGE_KEY = 'textcraft-drafts';
 const MAX_DRAFTS = 10;
 
 export function saveDraft(draft: Omit<Draft, 'id' | 'timestamp'>): void {
   try {
     const existingDrafts = loadDrafts();
     
-    const newDraft: Draft = {
-      ...draft,
-      id: crypto.randomUUID(),
-      timestamp: new Date(),
-    };
-    
-    const updatedDrafts = [newDraft, ...existingDrafts].slice(0, MAX_DRAFTS);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedDrafts));
+    // Check if there's a recent draft with similar content (within last 5 minutes)
+    // to update instead of creating a new one
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const recentDraftIndex = existingDrafts.findIndex(d => 
+      d.timestamp > fiveMinutesAgo && 
+      d.platform === draft.platform
+    );
+
+    if (recentDraftIndex !== -1) {
+      // Update existing recent draft
+      existingDrafts[recentDraftIndex] = {
+        ...existingDrafts[recentDraftIndex],
+        content: draft.content,
+        formattedContent: draft.formattedContent,
+        preview: draft.preview,
+        timestamp: new Date(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(existingDrafts));
+    } else {
+      // Create new draft
+      const newDraft: Draft = {
+        ...draft,
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+      };
+      
+      const updatedDrafts = [newDraft, ...existingDrafts].slice(0, MAX_DRAFTS);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedDrafts));
+    }
   } catch (error) {
     console.error('Failed to save draft:', error);
     // If storage is full, try removing oldest draft
@@ -63,4 +84,8 @@ export function deleteDraft(id: string): void {
 export function getDraft(id: string): Draft | null {
   const drafts = loadDrafts();
   return drafts.find((draft) => draft.id === id) || null;
+}
+
+export function clearAllDrafts(): void {
+  localStorage.removeItem(STORAGE_KEY);
 }

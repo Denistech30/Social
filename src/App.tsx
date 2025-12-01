@@ -65,8 +65,9 @@ function App() {
 
   useAutoSave({
     onSave: handleAutoSave,
-    delay: 10000,
+    delay: 30000, // Save every 30 seconds (not 10)
     enabled: hasUnsavedChanges,
+    content: inputText, // Track actual content changes
   });
 
   // Warn before leaving with unsaved changes
