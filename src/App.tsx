@@ -1,30 +1,350 @@
-import TextFormatter from "./components/TextFormatter"
-import "./App.css"
+import { useState, useEffect, useCallback } from 'react';
+import MainLayout from './components/layout/MainLayout';
+import InputSection from './components/input/InputSection';
+import PreviewSection from './components/preview/PreviewSection';
+import MobileFormattingToolbar from './components/mobile/MobileFormattingToolbar';
+import EmojiPicker from './components/input/EmojiPicker';
+import DraftsSidebar from './components/drafts/DraftsSidebar';
+import Toast from './components/shared/Toast';
+import { formatText, applyQuickStyle, stripFormatting } from './lib/unicode-transforms';
+import { platforms, getPlatformById } from './lib/platforms';
+import { useDrafts } from './hooks/useDrafts';
+import { useAutoSave } from './hooks/useAutoSave';
+import { useHistory } from './hooks/useHistory';
+import { useResponsive } from './hooks/useResponsive';
+import type { Draft, FormatType, TextSelection, StyleType, Platform } from './types';
+import './App.css';
 
 function App() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-emerald-50/30 p-6">
-      <div className="max-w-5xl mx-auto">
-        <header className="text-center mb-12">
-          <div className="flex items-center justify-center gap-4 mb-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/25 transform hover:scale-105 transition-transform duration-200">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-emerald-700 bg-clip-text text-transparent">
-              Social Text Formatter
-            </h1>
-          </div>
-          <p className="text-gray-600 text-lg font-medium max-w-2xl mx-auto leading-relaxed">
-            Transform your text with beautiful Unicode formatting for Facebook, LinkedIn, TikTok, Instagram, X, and more!
-          </p>
-        </header>
+  // Core state
+  const [inputText, setInputText] = useState('');
+  const [formattedText, setFormattedText] = useState('');
+  const [selectedPlatformId, setSelectedPlatformId] = useState(platforms[0].id);
+  const [selection, setSelection] = useState<TextSelection>({ start: 0, end: 0, text: '' });
+  
+  // UI state
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showDrafts, setShowDrafts] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // Toast state
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
+  const [showToast, setShowToast] = useState(false);
 
-        <TextFormatter />
-      </div>
-    </div>
-  )
+  // Hooks
+  const { drafts, addDraft, deleteDraft } = useDrafts();
+  const { push: pushHistory, undo, redo, canUndo, canRedo } = useHistory(inputText);
+  const { isMobile } = useResponsive();
+
+  // Get selected platform object
+  const selectedPlatform: Platform = getPlatformById(selectedPlatformId) || platforms[0];
+
+  // Format text in real-time with debouncing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const formatted = formatText(inputText);
+      setFormattedText(formatted);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [inputText]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    setHasUnsavedChanges(inputText.trim().length > 0);
+  }, [inputText]);
+
+  // Auto-save functionality
+  const handleAutoSave = useCallback(() => {
+    if (inputText.trim().length > 0) {
+      addDraft(inputText, selectedPlatformId, formattedText);
+      showToastMessage('Draft auto-saved', 'success');
+    }
+  }, [inputText, selectedPlatformId, formattedText, addDraft]);
+
+  useAutoSave({
+    onSave: handleAutoSave,
+    delay: 10000,
+    enabled: hasUnsavedChanges,
+  });
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        switch (e.key.toLowerCase()) {
+          case 'b':
+            e.preventDefault();
+            handleFormat('bold');
+            break;
+          case 'i':
+            e.preventDefault();
+            handleFormat('italic');
+            break;
+          case 'u':
+            e.preventDefault();
+            handleFormat('underline');
+            break;
+          case 'z':
+            e.preventDefault();
+            handleUndo();
+            break;
+          case 'y':
+            e.preventDefault();
+            handleRedo();
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selection, inputText]);
+
+  const showToastMessage = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+  };
+
+  // Handle text input change with history
+  const handleInputChange = (text: string) => {
+    setInputText(text);
+    pushHistory(text);
+  };
+
+  // Handle formatting
+  const handleFormat = (type: FormatType) => {
+    const { start, end, text: selectedText } = selection;
+
+    if (!selectedText) {
+      showToastMessage('Please select text to format', 'warning');
+      return;
+    }
+
+    let formattedSelection = '';
+    switch (type) {
+      case 'bold':
+        formattedSelection = `**${selectedText}**`;
+        break;
+      case 'italic':
+        formattedSelection = `*${selectedText}*`;
+        break;
+      case 'underline':
+        formattedSelection = `__${selectedText}__`;
+        break;
+      case 'strikethrough':
+        formattedSelection = `~~${selectedText}~~`;
+        break;
+      case 'heading-1':
+        formattedSelection = `# ${selectedText}`;
+        break;
+      case 'heading-2':
+        formattedSelection = `## ${selectedText}`;
+        break;
+      case 'heading-3':
+        formattedSelection = `### ${selectedText}`;
+        break;
+      case 'heading-4':
+        formattedSelection = `#### ${selectedText}`;
+        break;
+      case 'bullet-list':
+        formattedSelection = selectedText.split('\n').map(line => `- ${line}`).join('\n');
+        break;
+      case 'numbered-list':
+        formattedSelection = selectedText.split('\n').map((line, i) => `${i + 1}. ${line}`).join('\n');
+        break;
+      default:
+        formattedSelection = selectedText;
+    }
+
+    const newText = inputText.substring(0, start) + formattedSelection + inputText.substring(end);
+    handleInputChange(newText);
+  };
+
+  // Handle quick style application
+  const handleQuickStyle = (style: StyleType) => {
+    if (!inputText.trim()) {
+      showToastMessage('Please enter some text first', 'warning');
+      return;
+    }
+
+    const styled = applyQuickStyle(inputText, style);
+    handleInputChange(styled);
+    showToastMessage(`Applied ${style} style`, 'success');
+  };
+
+  // Handle emoji selection
+  const handleEmojiSelect = (emoji: string) => {
+    const { start } = selection;
+    const newText = inputText.substring(0, start) + emoji + inputText.substring(start);
+    handleInputChange(newText);
+    setShowEmojiPicker(false);
+  };
+
+  // Undo/Redo handlers
+  const handleUndo = () => {
+    const previousText = undo();
+    if (previousText !== inputText) {
+      setInputText(previousText);
+    }
+  };
+
+  const handleRedo = () => {
+    const nextText = redo();
+    if (nextText !== inputText) {
+      setInputText(nextText);
+    }
+  };
+
+  // Strip formatting
+  const handleStripFormatting = () => {
+    if (!inputText.trim()) return;
+    const plain = stripFormatting(inputText);
+    handleInputChange(plain);
+    showToastMessage('Formatting removed', 'success');
+  };
+
+  // Generate accessible version
+  const handleGeneratePlain = () => {
+    const plain = stripFormatting(formattedText);
+    handleInputChange(plain);
+    showToastMessage('Generated accessible version', 'success');
+  };
+
+  // Save draft
+  const handleSaveDraft = () => {
+    if (inputText.trim().length === 0) {
+      showToastMessage('Nothing to save', 'warning');
+      return;
+    }
+
+    addDraft(inputText, selectedPlatformId, formattedText);
+    showToastMessage('Draft saved successfully', 'success');
+    setHasUnsavedChanges(false);
+  };
+
+  // Clear all
+  const handleClear = () => {
+    if (inputText.trim().length === 0) return;
+    
+    if (confirm('Are you sure you want to clear all text?')) {
+      setInputText('');
+      setFormattedText('');
+      setHasUnsavedChanges(false);
+    }
+  };
+
+  // Load draft
+  const handleLoadDraft = (draft: Draft) => {
+    setInputText(draft.content);
+    setSelectedPlatformId(draft.platform);
+    setShowDrafts(false);
+    showToastMessage('Draft loaded', 'success');
+  };
+
+  // Delete draft
+  const handleDeleteDraft = (id: string) => {
+    deleteDraft(id);
+    showToastMessage('Draft deleted', 'success');
+  };
+
+  // LinkedIn optimization
+  const handleOptimizeForLinkedIn = (optimizedText: string) => {
+    handleInputChange(optimizedText);
+    showToastMessage('Text optimized for LinkedIn', 'success');
+  };
+
+  // Input Section component
+  const inputSection = (
+    <InputSection
+      inputText={inputText}
+      onInputChange={handleInputChange}
+      onSelectionChange={setSelection}
+      onFormat={handleFormat}
+      onQuickStyle={handleQuickStyle}
+      onEmojiClick={() => setShowEmojiPicker(true)}
+      onUndo={handleUndo}
+      onRedo={handleRedo}
+      onStripFormatting={handleStripFormatting}
+      onMakeAccessible={handleGeneratePlain}
+      canUndo={canUndo}
+      canRedo={canRedo}
+    />
+  );
+
+  // Preview Section component
+  const previewSection = (
+    <PreviewSection
+      formattedText={formattedText}
+      selectedPlatform={selectedPlatform}
+      onPlatformChange={setSelectedPlatformId}
+      onOptimizeForLinkedIn={handleOptimizeForLinkedIn}
+      onGeneratePlain={handleGeneratePlain}
+      onSave={handleSaveDraft}
+      onClear={handleClear}
+    />
+  );
+
+  return (
+    <>
+      <MainLayout
+        inputSection={inputSection}
+        previewSection={previewSection}
+        onOpenDrafts={() => setShowDrafts(true)}
+      />
+
+      {/* Mobile Formatting Toolbar */}
+      {isMobile && (
+        <MobileFormattingToolbar
+          onFormat={handleFormat}
+          onEmojiClick={() => setShowEmojiPicker(true)}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onStripFormatting={handleStripFormatting}
+          canUndo={canUndo}
+          canRedo={canRedo}
+        />
+      )}
+
+      {/* Modals */}
+      {showEmojiPicker && (
+        <EmojiPicker
+          onSelect={handleEmojiSelect}
+          onClose={() => setShowEmojiPicker(false)}
+        />
+      )}
+
+      <DraftsSidebar
+        isOpen={showDrafts}
+        drafts={drafts}
+        onClose={() => setShowDrafts(false)}
+        onLoadDraft={handleLoadDraft}
+        onDeleteDraft={handleDeleteDraft}
+      />
+
+      <Toast
+        message={toastMessage}
+        type={toastType}
+        show={showToast}
+        onClose={() => setShowToast(false)}
+      />
+    </>
+  );
 }
 
-export default App
+export default App;

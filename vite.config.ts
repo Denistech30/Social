@@ -13,20 +13,20 @@ export default defineConfig({
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Social Text Formatter',
-        short_name: 'TextFormatter',
-        description: 'AI-powered social media text formatter with Unicode styling, hashtag generation, and platform optimization',
-        theme_color: '#10b981',
+        name: 'TextCraft',
+        short_name: 'TextCraft',
+        description: 'Format your text with Unicode styling for social media platforms',
+        theme_color: '#34C759',
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
           {
-            src: 'icon-192x192.png',
+            src: 'icon-192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'icon-512x512.png',
+            src: 'icon-512.png',
             sizes: '512x512',
             type: 'image/png'
           }

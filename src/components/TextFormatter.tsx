@@ -2,9 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { Copy } from 'lucide-react'
 import FormatGuide from './FormatGuide'
 import Toast from './Toast'
-import AIEnhancer from './AIEnhancer'
-import HashtagGenerator from './HashtagGenerator'
-import AdvancedAIFeatures from './AdvancedAIFeatures'
 
 // Unicode character maps for styling
 const boldMap: Record<string, string> = {
@@ -254,7 +251,6 @@ const TextFormatter: React.FC = () => {
   const [outputText, setOutputText] = useState("Your formatted text will appear here...")
   const [toastMessage, setToastMessage] = useState("")
   const [showToast, setShowToast] = useState(false)
-  const [selectedHashtags, setSelectedHashtags] = useState<string[]>([])
 
   const convertToBold = useCallback((text: string): string => {
     return text
@@ -350,18 +346,9 @@ const TextFormatter: React.FC = () => {
       setShowToast(true)
       return
     }
-
-    let textToCopy = outputText;
-    
-    // Add hashtags to the copied text if any are selected
-    if (selectedHashtags.length > 0) {
-      const hashtagString = selectedHashtags.map(tag => `#${tag}`).join(' ');
-      textToCopy = `${outputText}\n\n${hashtagString}`;
-    }
-    
     try {
-      await navigator.clipboard.writeText(textToCopy)
-      setToastMessage("✅ Text and hashtags copied to clipboard!")
+      await navigator.clipboard.writeText(outputText)
+      setToastMessage("✅ Text copied to clipboard!")
       setShowToast(true)
     } catch (err) {
       console.error("Failed to copy text: ", err)
@@ -386,12 +373,6 @@ Ready to share!`
     <div className="space-y-6">
       <FormatGuide />
       
-      <AIEnhancer text={inputText} onTextChange={setInputText} />
-      
-      <HashtagGenerator text={inputText} onHashtagsChange={setSelectedHashtags} />
-      
-      <AdvancedAIFeatures text={inputText} onTextChange={setInputText} selectedHashtags={selectedHashtags} />
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -457,19 +438,7 @@ Ready to share!`
             {outputText === "Your formatted text will appear here..." ? (
               <span className="text-gray-400 italic">Your formatted text will appear here...</span>
             ) : (
-              <>
-                {outputText}
-                {selectedHashtags.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-300">
-                    <div className="text-xs text-gray-500 mb-2">Selected Hashtags:</div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedHashtags.map((tag, index) => (
-                        <span key={index} className="text-blue-600 text-sm">#{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+              outputText
             )}
           </div>
 
