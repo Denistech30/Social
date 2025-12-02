@@ -20,6 +20,9 @@ export async function smartCopy(
 
   const textToCopy = formats[format];
 
+  // Track copy count for PWA install prompt
+  trackCopyEvent();
+
   // Method 1: Modern Clipboard API with multiple MIME types
   try {
     if (navigator.clipboard && window.ClipboardItem) {
@@ -98,4 +101,21 @@ function convertToHTML(text: string): string {
 // Convert to Markdown
 function convertToMarkdown(text: string): string {
   return text;
+}
+
+// Track copy events for PWA install prompt
+function trackCopyEvent(): void {
+  try {
+    const currentCount = parseInt(localStorage.getItem('copyCount') || '0');
+    const newCount = currentCount + 1;
+    localStorage.setItem('copyCount', newCount.toString());
+    
+    // Dispatch custom event for InstallBanner to listen
+    if (newCount >= 3) {
+      window.dispatchEvent(new CustomEvent('copyMilestone', { detail: { count: newCount } }));
+    }
+  } catch (error) {
+    // localStorage might not be available
+    console.warn('Could not track copy event:', error);
+  }
 }

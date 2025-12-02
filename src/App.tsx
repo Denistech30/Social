@@ -9,6 +9,8 @@ import MobileFormattingToolbar from './components/mobile/MobileFormattingToolbar
 import EmojiPicker from './components/input/EmojiPicker';
 import DraftsSidebar from './components/drafts/DraftsSidebar';
 import Toast from './components/shared/Toast';
+import Footer from './components/footer/Footer';
+import InstallBanner from './components/pwa/InstallBanner';
 import { formatText, applyQuickStyle, stripFormatting } from './lib/unicode-transforms';
 import { platforms, getPlatformById } from './lib/platforms';
 import { useDrafts } from './hooks/useDrafts';
@@ -370,6 +372,12 @@ function App() {
         show={showToast}
         onClose={() => setShowToast(false)}
       />
+
+      {/* Footer */}
+      <Footer />
+
+      {/* PWA Install Banner */}
+      <InstallBanner />
     </>
   );
 }
