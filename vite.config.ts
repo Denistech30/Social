@@ -9,9 +9,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,svg}'],
-        // Exclude large PNG files from precaching, they'll be cached on demand
-        globIgnores: ['**/icon-512.png'],
+        globPatterns: ['**/*.{js,css,html,ico,svg,png}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
       },
       includeAssets: ['icon-192.png', 'icon-512.png'],
@@ -22,16 +20,27 @@ export default defineConfig({
         theme_color: '#34C759',
         background_color: '#ffffff',
         display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        orientation: 'portrait',
         icons: [
           {
             src: 'icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       }
