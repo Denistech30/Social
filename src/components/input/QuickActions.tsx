@@ -1,12 +1,14 @@
-import { Undo2, Redo2, Eraser, Eye } from 'lucide-react';
+import { Undo2, Redo2, Eraser, Eye, Save } from 'lucide-react';
 
 interface QuickActionsProps {
   onUndo: () => void;
   onRedo: () => void;
   onStripFormatting: () => void;
   onMakeAccessible?: () => void;
+  onSaveDraft?: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  hasUnsavedChanges?: boolean;
 }
 
 export default function QuickActions({
@@ -14,8 +16,10 @@ export default function QuickActions({
   onRedo,
   onStripFormatting,
   onMakeAccessible,
+  onSaveDraft,
   canUndo,
   canRedo,
+  hasUnsavedChanges = false,
 }: QuickActionsProps) {
   return (
     <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -52,6 +56,26 @@ export default function QuickActions({
       </div>
 
       <div className="w-px h-6 bg-gray-300" />
+
+      {/* Save Draft Button */}
+      {onSaveDraft && (
+        <button
+          onClick={onSaveDraft}
+          disabled={!hasUnsavedChanges}
+          className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+            hasUnsavedChanges
+              ? 'text-blue-700 hover:bg-blue-50 border border-blue-200'
+              : 'text-gray-400 cursor-not-allowed opacity-50'
+          }`}
+          title={hasUnsavedChanges ? "Save current text as draft" : "No changes to save"}
+          type="button"
+        >
+          <Save className="w-4 h-4" />
+          <span className="hidden sm:inline">Save Draft</span>
+        </button>
+      )}
+
+      {onSaveDraft && <div className="w-px h-6 bg-gray-300" />}
 
       {/* Strip Formatting Button */}
       <button

@@ -88,7 +88,6 @@ export default function Footer() {
               >
                 Denis
               </a>
-              <span>in Cameroon 🇨🇲</span>
             </div>
 
             {/* Version */}

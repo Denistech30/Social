@@ -12,7 +12,8 @@ import {
   ListOrdered,
   Eraser,
   Undo2,
-  Redo2
+  Redo2,
+  Save
 } from 'lucide-react';
 import MobileFormatButton from './MobileFormatButton';
 import type { FormatType } from '../../types';
@@ -23,8 +24,10 @@ interface MobileFormattingToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   onStripFormatting: () => void;
+  onSaveDraft?: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  hasUnsavedChanges?: boolean;
 }
 
 export default function MobileFormattingToolbar({
@@ -33,8 +36,10 @@ export default function MobileFormattingToolbar({
   onUndo,
   onRedo,
   onStripFormatting,
+  onSaveDraft,
   canUndo,
   canRedo,
+  hasUnsavedChanges = false,
 }: MobileFormattingToolbarProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -90,7 +95,7 @@ export default function MobileFormattingToolbar({
 
         {/* Expanded Options */}
         {expanded && (
-          <div className="p-2 pt-0 grid grid-cols-4 gap-2 border-t border-gray-100">
+          <div className={`p-2 pt-0 grid gap-2 border-t border-gray-100 ${onSaveDraft ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <MobileFormatButton
               icon={<Underline className="w-5 h-5" />}
               label="Underline"
@@ -116,6 +121,21 @@ export default function MobileFormattingToolbar({
               label="Clear"
               onClick={onStripFormatting}
             />
+            {onSaveDraft && (
+              <button
+                onClick={onSaveDraft}
+                disabled={!hasUnsavedChanges}
+                className={`min-w-[56px] h-12 px-3 flex flex-col items-center justify-center gap-0.5 rounded-lg transition-colors touch-manipulation ${
+                  hasUnsavedChanges
+                    ? 'bg-blue-50 border-2 border-blue-300 text-blue-700'
+                    : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
+                }`}
+                type="button"
+              >
+                <Save className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Save</span>
+              </button>
+            )}
             <button
               onClick={onUndo}
               disabled={!canUndo}

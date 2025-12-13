@@ -50,10 +50,10 @@ export default function HeroSection() {
         </div>
 
         {/* CTA Button */}
-        <div>
+        <div className="space-y-4">
           <button
             onClick={scrollToTool}
-            className="group relative inline-flex items-center gap-2 px-8 py-4 bg-white text-green-600 rounded-xl text-lg font-bold hover:bg-gray-50 transition-all duration-200 hover:scale-105 hover:shadow-2xl"
+            className="group relative inline-flex items-center gap-2 px-8 py-4 md:px-8 md:py-4 bg-white text-green-600 rounded-xl text-lg md:text-lg font-bold hover:bg-gray-50 transition-all duration-200 hover:scale-105 hover:shadow-2xl w-full max-w-sm md:w-auto"
           >
             <span>Start Formatting Now</span>
             <svg 
@@ -65,6 +65,13 @@ export default function HeroSection() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </button>
+          
+          {/* Mobile-specific quick access hint */}
+          <div className="md:hidden">
+            <p className="text-sm text-white/80 font-medium animate-pulse">
+              👆 Tap to jump to the editor
+            </p>
+          </div>
         </div>
 
         {/* Trust Indicators */}

@@ -41,12 +41,31 @@ const TextInput = forwardRef<TextInputRef, TextInputProps>(({
     },
   }));
 
-  // Auto-resize textarea
+  // Auto-resize textarea with scroll position preservation
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
+      // Store current scroll position
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      
+      // Temporarily disable transitions to prevent visual glitches
+      textarea.style.transition = 'none';
+      
+      // Reset height and calculate new height
       textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 600) + 'px';
+      const newHeight = Math.min(textarea.scrollHeight, 600);
+      textarea.style.height = newHeight + 'px';
+      
+      // Re-enable transitions after a brief delay
+      requestAnimationFrame(() => {
+        textarea.style.transition = '';
+        
+        // Restore scroll position if it changed
+        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        if (Math.abs(currentScrollTop - scrollTop) > 5) {
+          window.scrollTo(0, scrollTop);
+        }
+      });
     }
   }, [value]);
 

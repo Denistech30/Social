@@ -23,9 +23,9 @@ export default function StatsBar() {
     const interval = duration / steps;
 
     const targets = {
-      texts: 1234,
-      users: 856,
-      platforms: 8,
+      texts: 1000,
+      users: 100,
+      platforms: 10,
       uptime: 100,
     };
 
@@ -60,19 +60,19 @@ export default function StatsBar() {
     {
       icon: <Users className="w-6 h-6" />,
       value: `${counts.users.toLocaleString()}+`,
-      label: 'Active Users',
+      label: 'Creators',
       color: 'text-emerald-600',
     },
     {
       icon: <Globe className="w-6 h-6" />,
-      value: counts.platforms.toString(),
-      label: 'Platforms Supported',
+      value: `${counts.platforms}+`,
+      label: 'Platforms',
       color: 'text-teal-600',
     },
     {
       icon: <TrendingUp className="w-6 h-6" />,
       value: `${counts.uptime}%`,
-      label: 'Free Forever',
+      label: 'Free to Use',
       color: 'text-green-500',
     },
   ];
@@ -84,6 +84,12 @@ export default function StatsBar() {
           {stats.map((stat, index) => (
             <StatCard key={index} stat={stat} />
           ))}
+        </div>
+        
+        {/* Disclaimer */}
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-500 font-medium">
+          </p>
         </div>
       </div>
     </section>

@@ -46,6 +46,7 @@ function App() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDrafts, setShowDrafts] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showFloatingCTA, setShowFloatingCTA] = useState(false);
   
   // Toast state
   const [toastMessage, setToastMessage] = useState('');
@@ -103,6 +104,24 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  // Show floating CTA on mobile when user scrolls past hero
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleScroll = () => {
+      const heroHeight = window.innerHeight * 0.8; // Approximate hero height
+      const scrolled = window.scrollY > heroHeight;
+      const toolElement = document.getElementById('main-tool');
+      const toolVisible = toolElement ? toolElement.getBoundingClientRect().top <= window.innerHeight : false;
+      
+      // Show floating CTA when scrolled past hero but tool not yet visible
+      setShowFloatingCTA(scrolled && !toolVisible);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isMobile]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -119,6 +138,10 @@ function App() {
           case 'u':
             e.preventDefault();
             handleFormat('underline');
+            break;
+          case 's':
+            e.preventDefault();
+            handleSaveDraft();
             break;
           case 'z':
             e.preventDefault();
@@ -140,6 +163,14 @@ function App() {
     setToastMessage(message);
     setToastType(type);
     setShowToast(true);
+  };
+
+  // Scroll to tool function
+  const scrollToTool = () => {
+    document.getElementById('main-tool')?.scrollIntoView({ 
+      behavior: 'smooth',
+      block: 'start'
+    });
   };
 
   // Handle text input change with history
@@ -254,8 +285,13 @@ function App() {
       return;
     }
 
+    if (inputText === DEMO_TEXT) {
+      showToastMessage('Please modify the demo text before saving', 'warning');
+      return;
+    }
+
     addDraft(inputText, selectedPlatformId, formattedText);
-    showToastMessage('Draft saved successfully', 'success');
+    showToastMessage('Draft saved successfully! 📝', 'success');
     setHasUnsavedChanges(false);
   };
 
@@ -299,8 +335,10 @@ function App() {
       onRedo={handleRedo}
       onStripFormatting={handleStripFormatting}
       onMakeAccessible={handleGeneratePlain}
+      onSaveDraft={handleSaveDraft}
       canUndo={canUndo}
       canRedo={canRedo}
+      hasUnsavedChanges={hasUnsavedChanges}
     />
   );
 
@@ -322,6 +360,24 @@ function App() {
       {/* Hero Section */}
       <HeroSection />
       
+      {/* Quick Access CTA - Mobile Only */}
+      {isMobile && (
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-y border-green-200 py-4">
+          <div className="max-w-6xl mx-auto px-6 text-center">
+            <button
+              onClick={scrollToTool}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold text-sm hover:shadow-lg transition-all duration-200 hover:scale-105"
+            >
+              <span>🚀 Skip to Editor</span>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+            <p className="text-xs text-gray-600 mt-2">Jump straight to the formatting tool</p>
+          </div>
+        </div>
+      )}
+      
       {/* Stats Bar */}
       <StatsBar />
       
@@ -329,7 +385,16 @@ function App() {
       <FeaturesSection />
 
       {/* Main Tool */}
-      <div id="main-tool">
+      <div id="main-tool" className="relative">
+        {/* Visual indicator for mobile users */}
+        {isMobile && (
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-center py-3 px-6">
+            <p className="text-sm font-semibold">
+              ✨ Text Formatter Tool - Start typing below!
+            </p>
+          </div>
+        )}
+        
         <MainLayout
           inputSection={inputSection}
           previewSection={previewSection}
@@ -345,8 +410,10 @@ function App() {
           onUndo={handleUndo}
           onRedo={handleRedo}
           onStripFormatting={handleStripFormatting}
+          onSaveDraft={handleSaveDraft}
           canUndo={canUndo}
           canRedo={canRedo}
+          hasUnsavedChanges={hasUnsavedChanges}
         />
       )}
 
@@ -372,6 +439,21 @@ function App() {
         show={showToast}
         onClose={() => setShowToast(false)}
       />
+
+      {/* Floating CTA Button - Mobile Only */}
+      {showFloatingCTA && isMobile && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40 animate-bounce">
+          <button
+            onClick={scrollToTool}
+            className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-full font-bold text-sm shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center gap-2 border-2 border-white"
+          >
+            <span>✨ Start Formatting</span>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <Footer />

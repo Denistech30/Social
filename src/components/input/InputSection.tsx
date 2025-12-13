@@ -17,8 +17,10 @@ interface InputSectionProps {
   onRedo: () => void;
   onStripFormatting: () => void;
   onMakeAccessible?: () => void;
+  onSaveDraft?: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  hasUnsavedChanges?: boolean;
 }
 
 export default function InputSection({
@@ -32,8 +34,10 @@ export default function InputSection({
   onRedo,
   onStripFormatting,
   onMakeAccessible,
+  onSaveDraft,
   canUndo,
   canRedo,
+  hasUnsavedChanges = false,
 }: InputSectionProps) {
   const { isMobile } = useResponsive();
   const textInputRef = useRef<TextInputRef>(null);
@@ -47,6 +51,13 @@ export default function InputSection({
           onEmojiClick={onEmojiClick} 
         />
       )}
+
+      {/* How it works micro-copy */}
+      <div className="flex items-center justify-center px-4 -mt-2 mb-2">
+        <p className="text-xs sm:text-sm text-gray-500 font-medium tracking-wide text-center leading-relaxed bg-gray-50/50 px-4 py-2 rounded-full border border-gray-200/50">
+          Type or paste your text → Format with the toolbar → Copy and paste into your favorite platform
+        </p>
+      </div>
 
       {/* Text Input Area */}
       <TextInput
@@ -63,8 +74,10 @@ export default function InputSection({
           onRedo={onRedo}
           onStripFormatting={onStripFormatting}
           onMakeAccessible={onMakeAccessible}
+          onSaveDraft={onSaveDraft}
           canUndo={canUndo}
           canRedo={canRedo}
+          hasUnsavedChanges={hasUnsavedChanges}
         />
       )}
 
