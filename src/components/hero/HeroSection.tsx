@@ -46,7 +46,7 @@ export default function HeroSection() {
         <div className="flex flex-wrap justify-center gap-3 md:gap-4 mb-10">
           <FeaturePill icon={<Zap className="w-4 h-4" />} text="Instant Formatting" />
           <FeaturePill icon={<Shield className="w-4 h-4" />} text="Accessibility Scoring" />
-          <FeaturePill icon={<Check className="w-4 h-4" />} text="8 Platforms Supported" />
+          <FeaturePill icon={<Check className="w-4 h-4" />} text="6 Platforms Supported" />
         </div>
 
         {/* CTA Button */}
@@ -76,7 +76,7 @@ export default function HeroSection() {
 
         {/* Trust Indicators */}
         <div className="mt-8 text-sm text-white/70">
-          <p>Join 1,000+ content creators using TextCraft daily</p>
+          <p>Built for creators who want clean, readable posts—fast</p>
         </div>
       </div>
     </section>
