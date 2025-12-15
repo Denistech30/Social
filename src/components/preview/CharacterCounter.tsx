@@ -52,7 +52,7 @@ export default function CharacterCounter({ text, platformLimit, platformName }: 
         <div className="flex items-center gap-2">
           <Type className={`w-5 h-5 ${status.text}`} />
           <span className="text-sm font-semibold text-gray-700">
-            Character Count
+            Counts against limit: Formatted (Unicode)
           </span>
         </div>
         <div className={`text-xl font-bold ${status.text}`}>
@@ -76,7 +76,7 @@ export default function CharacterCounter({ text, platformLimit, platformName }: 
       {/* Info Row */}
       <div className="flex items-center justify-between text-xs mb-2">
         <span className="text-gray-600">
-          Plain text: {plainTextCount.toLocaleString()} chars
+          Plain: {plainTextCount.toLocaleString()}
         </span>
         <span className={`font-medium ${status.text}`}>
           {status.status}
@@ -93,7 +93,7 @@ export default function CharacterCounter({ text, platformLimit, platformName }: 
           remaining < 20 ? 'text-yellow-600' : 
           'text-green-600'
         }`}>
-          {remaining >= 0 ? '+' : ''}{remaining}
+          {remaining}
         </span>
       </div>
 
@@ -103,7 +103,7 @@ export default function CharacterCounter({ text, platformLimit, platformName }: 
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-5 h-5 text-red-700 flex-shrink-0 mt-0.5" />
             <div className="text-xs text-red-800">
-              <strong>Character Limit Exceeded!</strong>
+              <div className="font-semibold">Character Limit Exceeded!</div>
               <p className="mt-1">
                 Your text is {Math.abs(remaining)} characters over the {platformName} limit. 
                 You need to remove {Math.abs(remaining)} characters before posting.
@@ -116,7 +116,7 @@ export default function CharacterCounter({ text, platformLimit, platformName }: 
       {/* Unicode vs Plain Text Explainer */}
       {unicodeCount !== plainTextCount && (
         <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-          <strong>💡 Why two counts?</strong> Unicode formatting uses more characters than plain text. 
+          <span className="font-semibold">💡 Why two counts?</span> Unicode formatting uses more characters than plain text. 
           Some platforms count Unicode differently.
         </div>
       )}
