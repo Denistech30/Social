@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Download, Copy, Check, QrCode as QrCodeIcon } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import { trackQREvent } from '../../utils/featureFlags';
 
 interface QrCodeModalProps {
   open: boolean;
@@ -68,6 +69,9 @@ export default function QrCodeModal({ open, onOpenChange }: QrCodeModalProps) {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // Track download event
+      trackQREvent('qr_downloaded', { domain });
     } catch (err) {
       console.error('Failed to download QR code:', err);
     }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, HelpCircle } from 'lucide-react';
+import { FileText, HelpCircle, QrCode } from 'lucide-react';
 import { useResponsive } from '../../hooks/useResponsive';
 import MobileTabNav from './MobileTabNav';
 
@@ -8,13 +8,15 @@ interface MainLayoutProps {
   previewSection: React.ReactNode;
   onOpenDrafts: () => void;
   onOpenHelp?: () => void;
+  onOpenQR?: () => void;
 }
 
 export default function MainLayout({ 
   inputSection, 
   previewSection, 
   onOpenDrafts,
-  onOpenHelp 
+  onOpenHelp,
+  onOpenQR 
 }: MainLayoutProps) {
   const { isMobile } = useResponsive();
   const [activeTab, setActiveTab] = useState<'write' | 'preview'>('write');
@@ -42,6 +44,16 @@ export default function MainLayout({
 
         {/* Right side - Actions */}
         <div className="flex items-center gap-2 lg:gap-4">
+          {onOpenQR && (
+            <button 
+              onClick={onOpenQR}
+              className="flex items-center gap-2 px-3 lg:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+              aria-label="Open QR Generator"
+            >
+              <QrCode className="w-4 h-4" />
+              <span className="hidden sm:inline font-medium">QR Generator</span>
+            </button>
+          )}
           <button 
             onClick={onOpenDrafts}
             className="flex items-center gap-2 px-3 lg:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"

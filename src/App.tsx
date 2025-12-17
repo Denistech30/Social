@@ -11,6 +11,7 @@ import DraftsSidebar from './components/drafts/DraftsSidebar';
 import Toast from './components/shared/Toast';
 import Footer from './components/footer/Footer';
 import InstallBanner from './components/pwa/InstallBanner';
+import QrCodeModal from './components/shared/QrCodeModal';
 import { formatText, applyQuickStyle, stripFormatting } from './lib/unicode-transforms';
 import { platforms, getPlatformById } from './lib/platforms';
 import { useDrafts } from './hooks/useDrafts';
@@ -45,6 +46,7 @@ function App() {
   // UI state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDrafts, setShowDrafts] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showFloatingCTA, setShowFloatingCTA] = useState(false);
   
@@ -339,6 +341,18 @@ function App() {
     showToastMessage('Text optimized for LinkedIn', 'success');
   };
 
+  // Handle QR modal from header
+  const handleHeaderQRClick = () => {
+    // Track GA4 event for header QR access
+    if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+      window.gtag('event', 'qr_opened', {
+        event_category: 'qr_feature',
+        source: 'header'
+      });
+    }
+    setShowQrModal(true);
+  };
+
   // Input Section component
   const inputSection = (
     <InputSection
@@ -417,6 +431,7 @@ function App() {
           inputSection={inputSection}
           previewSection={previewSection}
           onOpenDrafts={() => setShowDrafts(true)}
+          onOpenQR={handleHeaderQRClick}
         />
       </div>
 
@@ -458,6 +473,9 @@ function App() {
         show={showToast}
         onClose={() => setShowToast(false)}
       />
+
+      {/* QR Code Modal */}
+      <QrCodeModal open={showQrModal} onOpenChange={setShowQrModal} />
 
       {/* Floating CTA Button - Mobile Only */}
       {showFloatingCTA && isMobile && (

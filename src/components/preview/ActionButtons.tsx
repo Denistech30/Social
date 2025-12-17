@@ -1,23 +1,34 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Copy, Save, X, Check, Loader2, Info, QrCode } from 'lucide-react';
 import { smartCopy } from '../../lib/copy-system';
 import type { CopyFormat } from '../../types';
 import { useResponsive } from '../../hooks/useResponsive';
 import QrCodeModal from '../shared/QrCodeModal';
+import QRTooltip from '../shared/QRTooltip';
+import { 
+  hasSeenQRFeature, 
+  markQRFeatureAsSeen, 
+  shouldShowCopyNudge, 
+  incrementCopyNudgeCount,
+  trackQREvent 
+} from '../../utils/featureFlags';
 
 interface ActionButtonsProps {
   text: string;
   onSave: () => void;
   onClear: () => void;
+  isUserTyping?: boolean;
 }
 
-export default function ActionButtons({ text, onSave, onClear }: ActionButtonsProps) {
+export default function ActionButtons({ text, onSave, onClear, isUserTyping = false }: ActionButtonsProps) {
   const [copied, setCopied] = useState(false);
   const [copyMethod, setCopyMethod] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [showFormats, setShowFormats] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showCopyNudge, setShowCopyNudge] = useState(false);
   const { isMobile } = useResponsive();
+  const qrButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleCopy = async (format: CopyFormat = 'unicode') => {
     if (!text) return;
@@ -27,10 +38,18 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
     if (result.success) {
       setCopied(true);
       setCopyMethod(result.method);
+      
+      // Show copy nudge if conditions are met
+      if (format === 'unicode' && shouldShowCopyNudge()) {
+        incrementCopyNudgeCount();
+        setShowCopyNudge(true);
+      }
+      
       setTimeout(() => {
         setCopied(false);
         setShowFormats(false);
-      }, 2000);
+        setShowCopyNudge(false);
+      }, 4000); // Extended to show nudge
     } else {
       // Show manual copy fallback
       setShowFormats(true);
@@ -45,6 +64,16 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleQRClick = () => {
+    markQRFeatureAsSeen();
+    trackQREvent('qr_opened');
+    setShowQrModal(true);
+  };
+
+  const handleTooltipTryIt = () => {
+    handleQRClick();
   };
 
   return (
@@ -109,14 +138,20 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
         </button>
       </div>
 
-      {/* QR Code Button */}
+      {/* QR for Link Button */}
       <button
-        onClick={() => setShowQrModal(true)}
-        className="w-full h-10 px-4 text-sm font-medium bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center justify-center gap-2"
+        ref={qrButtonRef}
+        onClick={handleQRClick}
+        className="w-full h-10 px-4 text-sm font-medium bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center justify-center gap-2 relative"
         type="button"
       >
         <QrCode className="w-4 h-4" />
-        <span>QR Code</span>
+        <span>QR for Link</span>
+        {!hasSeenQRFeature() && (
+          <span className="absolute -top-1 -right-1 px-1.5 py-0.5 text-xs font-bold text-white bg-green-500 rounded-full animate-pulse">
+            NEW
+          </span>
+        )}
       </button>
 
       {/* Mobile/Fallback Manual Copy */}
@@ -140,8 +175,15 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
 
       {/* Success feedback with method used */}
       {copied && copyMethod !== 'failed' && (
-        <div className="p-2 bg-green-50 rounded-lg text-xs text-green-800 text-center">
-          ✓ Copied using {copyMethod} method
+        <div className="p-3 bg-green-50 rounded-lg text-green-800 space-y-1">
+          <div className="text-xs text-center">
+            ✓ Copied using {copyMethod} method
+          </div>
+          {showCopyNudge && (
+            <div className="text-xs text-center text-green-700 border-t border-green-200 pt-2">
+              Need to share a website link? Use 'QR for Link' to generate a scannable code.
+            </div>
+          )}
         </div>
       )}
 
@@ -176,6 +218,13 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
           <span className="hidden sm:inline">Clear</span>
         </button>
       </div>
+
+      {/* QR Tooltip */}
+      <QRTooltip 
+        targetRef={qrButtonRef}
+        isUserTyping={isUserTyping}
+        onTryIt={handleTooltipTryIt}
+      />
 
       {/* QR Code Modal */}
       <QrCodeModal open={showQrModal} onOpenChange={setShowQrModal} />
