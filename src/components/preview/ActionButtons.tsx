@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Copy, Save, X, Check, Loader2, Info } from 'lucide-react';
+import { Copy, Save, X, Check, Loader2, Info, QrCode } from 'lucide-react';
 import { smartCopy } from '../../lib/copy-system';
 import type { CopyFormat } from '../../types';
 import { useResponsive } from '../../hooks/useResponsive';
+import QrCodeModal from '../shared/QrCodeModal';
 
 interface ActionButtonsProps {
   text: string;
@@ -15,6 +16,7 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
   const [copyMethod, setCopyMethod] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [showFormats, setShowFormats] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const { isMobile } = useResponsive();
 
   const handleCopy = async (format: CopyFormat = 'unicode') => {
@@ -107,6 +109,16 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
         </button>
       </div>
 
+      {/* QR Code Button */}
+      <button
+        onClick={() => setShowQrModal(true)}
+        className="w-full h-10 px-4 text-sm font-medium bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center justify-center gap-2"
+        type="button"
+      >
+        <QrCode className="w-4 h-4" />
+        <span>QR Code</span>
+      </button>
+
       {/* Mobile/Fallback Manual Copy */}
       {(showFormats || (isMobile && copied && copyMethod === 'failed')) && (
         <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-3">
@@ -164,6 +176,9 @@ export default function ActionButtons({ text, onSave, onClear }: ActionButtonsPr
           <span className="hidden sm:inline">Clear</span>
         </button>
       </div>
+
+      {/* QR Code Modal */}
+      <QrCodeModal open={showQrModal} onOpenChange={setShowQrModal} />
     </div>
   );
 }
