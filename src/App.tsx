@@ -54,7 +54,7 @@ function App() {
   const [showToast, setShowToast] = useState(false);
 
   // Hooks
-  const { drafts, addDraft, deleteDraft } = useDrafts();
+  const { drafts, addDraft, addNewDraft, deleteDraft } = useDrafts();
   const { push: pushHistory, undo, redo, canUndo, canRedo } = useHistory(inputText);
   const { isMobile } = useResponsive();
 
@@ -295,6 +295,23 @@ function App() {
     setHasUnsavedChanges(false);
   };
 
+  // Save as new draft (always creates a new draft)
+  const handleSaveNewDraft = () => {
+    if (inputText.trim().length === 0) {
+      showToastMessage('Nothing to save', 'warning');
+      return;
+    }
+
+    if (inputText === DEMO_TEXT) {
+      showToastMessage('Please modify the demo text before saving', 'warning');
+      return;
+    }
+
+    addNewDraft(inputText, selectedPlatformId, formattedText);
+    showToastMessage('New draft created! ✨', 'success');
+    setHasUnsavedChanges(false);
+  };
+
   // Clear all
   const handleClear = () => {
     setInputText('');
@@ -336,6 +353,7 @@ function App() {
       onStripFormatting={handleStripFormatting}
       onMakeAccessible={handleGeneratePlain}
       onSaveDraft={handleSaveDraft}
+      onSaveNewDraft={handleSaveNewDraft}
       canUndo={canUndo}
       canRedo={canRedo}
       hasUnsavedChanges={hasUnsavedChanges}
@@ -411,6 +429,7 @@ function App() {
           onRedo={handleRedo}
           onStripFormatting={handleStripFormatting}
           onSaveDraft={handleSaveDraft}
+          onSaveNewDraft={handleSaveNewDraft}
           canUndo={canUndo}
           canRedo={canRedo}
           hasUnsavedChanges={hasUnsavedChanges}

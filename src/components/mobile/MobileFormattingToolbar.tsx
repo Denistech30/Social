@@ -13,7 +13,8 @@ import {
   Eraser,
   Undo2,
   Redo2,
-  Save
+  Save,
+  Plus
 } from 'lucide-react';
 import MobileFormatButton from './MobileFormatButton';
 import type { FormatType } from '../../types';
@@ -25,6 +26,7 @@ interface MobileFormattingToolbarProps {
   onRedo: () => void;
   onStripFormatting: () => void;
   onSaveDraft?: () => void;
+  onSaveNewDraft?: () => void;
   canUndo: boolean;
   canRedo: boolean;
   hasUnsavedChanges?: boolean;
@@ -37,6 +39,7 @@ export default function MobileFormattingToolbar({
   onRedo,
   onStripFormatting,
   onSaveDraft,
+  onSaveNewDraft,
   canUndo,
   canRedo,
   hasUnsavedChanges = false,
@@ -122,19 +125,37 @@ export default function MobileFormattingToolbar({
               onClick={onStripFormatting}
             />
             {onSaveDraft && (
-              <button
-                onClick={onSaveDraft}
-                disabled={!hasUnsavedChanges}
-                className={`min-w-[56px] h-12 px-3 flex flex-col items-center justify-center gap-0.5 rounded-lg transition-colors touch-manipulation ${
-                  hasUnsavedChanges
-                    ? 'bg-blue-50 border-2 border-blue-300 text-blue-700'
-                    : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
-                }`}
-                type="button"
-              >
-                <Save className="w-5 h-5" />
-                <span className="text-[10px] font-medium">Save</span>
-              </button>
+              <>
+                <button
+                  onClick={onSaveDraft}
+                  disabled={!hasUnsavedChanges}
+                  className={`min-w-[56px] h-12 px-3 flex flex-col items-center justify-center gap-0.5 rounded-lg transition-colors touch-manipulation ${
+                    hasUnsavedChanges
+                      ? 'bg-blue-50 border-2 border-blue-300 text-blue-700'
+                      : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
+                  }`}
+                  type="button"
+                >
+                  <Save className="w-5 h-5" />
+                  <span className="text-[10px] font-medium">Save</span>
+                </button>
+                
+                {onSaveNewDraft && (
+                  <button
+                    onClick={onSaveNewDraft}
+                    disabled={!hasUnsavedChanges}
+                    className={`min-w-[56px] h-12 px-3 flex flex-col items-center justify-center gap-0.5 rounded-lg transition-colors touch-manipulation ${
+                      hasUnsavedChanges
+                        ? 'bg-green-50 border-2 border-green-300 text-green-700'
+                        : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
+                    }`}
+                    type="button"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span className="text-[10px] font-medium">New</span>
+                  </button>
+                )}
+              </>
             )}
             <button
               onClick={onUndo}

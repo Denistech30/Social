@@ -89,3 +89,33 @@ export function getDraft(id: string): Draft | null {
 export function clearAllDrafts(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
+
+export function saveNewDraft(draft: Omit<Draft, 'id' | 'timestamp'>): void {
+  try {
+    const existingDrafts = loadDrafts();
+    
+    // Always create a new draft (no update logic)
+    const newDraft: Draft = {
+      ...draft,
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+    };
+    
+    const updatedDrafts = [newDraft, ...existingDrafts].slice(0, MAX_DRAFTS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedDrafts));
+  } catch (error) {
+    console.error('Failed to save new draft:', error);
+    // If storage is full, try removing oldest draft
+    try {
+      const existingDrafts = loadDrafts();
+      if (existingDrafts.length > 0) {
+        existingDrafts.pop(); // Remove oldest
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(existingDrafts));
+        // Try saving again
+        saveNewDraft(draft);
+      }
+    } catch (retryError) {
+      throw new Error('Unable to save draft. Storage is full.');
+    }
+  }
+}

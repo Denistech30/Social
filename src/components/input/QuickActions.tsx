@@ -1,4 +1,4 @@
-import { Undo2, Redo2, Eraser, Eye, Save } from 'lucide-react';
+import { Undo2, Redo2, Eraser, Eye, Save, Plus } from 'lucide-react';
 
 interface QuickActionsProps {
   onUndo: () => void;
@@ -6,6 +6,7 @@ interface QuickActionsProps {
   onStripFormatting: () => void;
   onMakeAccessible?: () => void;
   onSaveDraft?: () => void;
+  onSaveNewDraft?: () => void;
   canUndo: boolean;
   canRedo: boolean;
   hasUnsavedChanges?: boolean;
@@ -17,6 +18,7 @@ export default function QuickActions({
   onStripFormatting,
   onMakeAccessible,
   onSaveDraft,
+  onSaveNewDraft,
   canUndo,
   canRedo,
   hasUnsavedChanges = false,
@@ -57,22 +59,41 @@ export default function QuickActions({
 
       <div className="w-px h-6 bg-gray-300" />
 
-      {/* Save Draft Button */}
+      {/* Save Draft Buttons */}
       {onSaveDraft && (
-        <button
-          onClick={onSaveDraft}
-          disabled={!hasUnsavedChanges}
-          className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-            hasUnsavedChanges
-              ? 'text-blue-700 hover:bg-blue-50 border border-blue-200'
-              : 'text-gray-400 cursor-not-allowed opacity-50'
-          }`}
-          title={hasUnsavedChanges ? "Save current text as draft" : "No changes to save"}
-          type="button"
-        >
-          <Save className="w-4 h-4" />
-          <span className="hidden sm:inline">Save Draft</span>
-        </button>
+        <>
+          <button
+            onClick={onSaveDraft}
+            disabled={!hasUnsavedChanges}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              hasUnsavedChanges
+                ? 'text-blue-700 hover:bg-blue-50 border border-blue-200'
+                : 'text-gray-400 cursor-not-allowed opacity-50'
+            }`}
+            title={hasUnsavedChanges ? "Save current text as draft" : "No changes to save"}
+            type="button"
+          >
+            <Save className="w-4 h-4" />
+            <span className="hidden sm:inline">Save Draft</span>
+          </button>
+          
+          {onSaveNewDraft && (
+            <button
+              onClick={onSaveNewDraft}
+              disabled={!hasUnsavedChanges}
+              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                hasUnsavedChanges
+                  ? 'text-green-700 hover:bg-green-50 border border-green-200'
+                  : 'text-gray-400 cursor-not-allowed opacity-50'
+              }`}
+              title={hasUnsavedChanges ? "Save as new draft (creates separate draft)" : "No changes to save"}
+              type="button"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">New Draft</span>
+            </button>
+          )}
+        </>
       )}
 
       {onSaveDraft && <div className="w-px h-6 bg-gray-300" />}

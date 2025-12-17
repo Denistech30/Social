@@ -18,6 +18,7 @@ interface InputSectionProps {
   onStripFormatting: () => void;
   onMakeAccessible?: () => void;
   onSaveDraft?: () => void;
+  onSaveNewDraft?: () => void;
   canUndo: boolean;
   canRedo: boolean;
   hasUnsavedChanges?: boolean;
@@ -35,6 +36,7 @@ export default function InputSection({
   onStripFormatting,
   onMakeAccessible,
   onSaveDraft,
+  onSaveNewDraft,
   canUndo,
   canRedo,
   hasUnsavedChanges = false,
@@ -75,6 +77,7 @@ export default function InputSection({
           onStripFormatting={onStripFormatting}
           onMakeAccessible={onMakeAccessible}
           onSaveDraft={onSaveDraft}
+          onSaveNewDraft={onSaveNewDraft}
           canUndo={canUndo}
           canRedo={canRedo}
           hasUnsavedChanges={hasUnsavedChanges}

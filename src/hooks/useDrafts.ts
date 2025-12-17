@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Draft } from '../types';
-import { loadDrafts, saveDraft, deleteDraft as deleteDraftFromStorage } from '../lib/storage';
+import { loadDrafts, saveDraft, saveNewDraft, deleteDraft as deleteDraftFromStorage } from '../lib/storage';
 
 export function useDrafts() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -15,6 +15,12 @@ export function useDrafts() {
     setDrafts(loadDrafts());
   };
 
+  const addNewDraft = (content: string, platform: string, formattedContent: string) => {
+    const preview = content.slice(0, 50);
+    saveNewDraft({ content, platform, preview, formattedContent });
+    setDrafts(loadDrafts());
+  };
+
   const deleteDraft = (id: string) => {
     deleteDraftFromStorage(id);
     setDrafts(loadDrafts());
@@ -24,5 +30,5 @@ export function useDrafts() {
     setDrafts(loadDrafts());
   };
 
-  return { drafts, addDraft, deleteDraft, refreshDrafts };
+  return { drafts, addDraft, addNewDraft, deleteDraft, refreshDrafts };
 }
