@@ -79,6 +79,64 @@ npm run build
 
 ---
 
+## 🤖 AI Shorten Setup
+
+TextCraft includes an AI-powered feature to automatically shorten posts that exceed platform character limits.
+
+### Prerequisites
+
+1. **Hugging Face Account**: Create a free account at [huggingface.co](https://huggingface.co)
+2. **API Token**: Generate a User Access Token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+
+### Environment Setup
+
+#### For Local Development
+
+1. Create a `.env` file in the project root:
+```bash
+HF_TOKEN=hf_your_token_here
+```
+
+2. Start the development server with Netlify Functions:
+```bash
+npm run dev:netlify
+```
+
+#### For Production (Netlify)
+
+1. Go to your Netlify site dashboard
+2. Navigate to **Site configuration** → **Environment variables**
+3. Add the environment variable:
+   - **Key**: `HF_TOKEN`
+   - **Value**: `hf_your_token_here`
+
+### How It Works
+
+- When your text exceeds a platform's character limit, an "AI Shorten" button appears
+- Click the button to open the AI rewriting modal
+- Configure options (keep hashtags, tone, etc.)
+- AI generates a shortened version that fits the limit
+- Review and either copy the suggestion or replace your draft
+
+### Supported Platforms
+
+AI shortening works for:
+- **Twitter/X** (280 characters)
+- **Instagram** (2,200 characters)  
+- **Threads** (500 characters)
+- **LinkedIn** (3,000 characters)
+
+### Fallback
+
+If AI service is unavailable, the tool provides manual shortening tips:
+- Remove emojis and extra punctuation
+- Shorten hashtags or move to comments
+- Remove filler words
+- Use abbreviations
+- Split into multiple posts
+
+---
+
 ## 📖 How to Use
 
 1. **Type or paste** your text in the input area (left side)

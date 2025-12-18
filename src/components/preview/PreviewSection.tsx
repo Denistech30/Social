@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import PlatformSelector from './PlatformSelector';
 import PreviewCard from './PreviewCard';
 import CharacterCounter from './CharacterCounter';
@@ -6,6 +7,7 @@ import FontCompatibilityChecker from './FontCompatibilityChecker';
 import LinkedInAlgorithmWarning from './LinkedInAlgorithmWarning';
 import TestBeforePost from './TestBeforePost';
 import ActionButtons from './ActionButtons';
+import AIShortenModal from '../shared/AIShortenModal';
 import type { Platform } from '../../types';
 
 interface PreviewSectionProps {
@@ -16,6 +18,7 @@ interface PreviewSectionProps {
   onGeneratePlain: () => void;
   onSave: () => void;
   onClear: () => void;
+  onTextChange?: (text: string) => void;
 }
 
 export default function PreviewSection({
@@ -26,7 +29,19 @@ export default function PreviewSection({
   onGeneratePlain,
   onSave,
   onClear,
+  onTextChange,
 }: PreviewSectionProps) {
+  const [showAIShortenModal, setShowAIShortenModal] = useState(false);
+
+  const handleAIShortenClick = () => {
+    setShowAIShortenModal(true);
+  };
+
+  const handleAIShortenReplace = (newText: string) => {
+    if (onTextChange) {
+      onTextChange(newText);
+    }
+  };
   return (
     <div className="p-6 lg:p-8 space-y-6 max-w-3xl mx-auto">
       {/* Platform Selector */}
@@ -46,6 +61,8 @@ export default function PreviewSection({
         text={formattedText}
         platformLimit={selectedPlatform.charLimit}
         platformName={selectedPlatform.name}
+        platformId={selectedPlatform.id}
+        onShortenClick={handleAIShortenClick}
       />
 
       {/* Accessibility Indicator */}
@@ -79,6 +96,16 @@ export default function PreviewSection({
         text={formattedText}
         onSave={onSave}
         onClear={onClear}
+      />
+
+      {/* AI Shorten Modal */}
+      <AIShortenModal
+        open={showAIShortenModal}
+        onOpenChange={setShowAIShortenModal}
+        text={formattedText}
+        platform={selectedPlatform.name}
+        platformLimit={selectedPlatform.charLimit}
+        onReplace={handleAIShortenReplace}
       />
     </div>
   );

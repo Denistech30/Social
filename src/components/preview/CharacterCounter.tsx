@@ -1,13 +1,15 @@
-import { Type, AlertTriangle } from 'lucide-react';
+import { Type, AlertTriangle, Wand2 } from 'lucide-react';
 import { stripFormatting } from '../../lib/unicode-transforms';
 
 interface CharacterCounterProps {
   text: string;
   platformLimit: number;
   platformName: string;
+  platformId: string;
+  onShortenClick?: () => void;
 }
 
-export default function CharacterCounter({ text, platformLimit, platformName }: CharacterCounterProps) {
+export default function CharacterCounter({ text, platformLimit, platformName, platformId, onShortenClick }: CharacterCounterProps) {
   // Calculate both counts
   const plainTextCount = stripFormatting(text).length;
   const unicodeCount = [...text].length; // Proper Unicode character count
@@ -102,12 +104,23 @@ export default function CharacterCounter({ text, platformLimit, platformName }: 
         <div className="mt-3 p-3 bg-red-100 border-2 border-red-300 rounded-lg">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-5 h-5 text-red-700 flex-shrink-0 mt-0.5" />
-            <div className="text-xs text-red-800">
+            <div className="flex-1 text-xs text-red-800">
               <div className="font-semibold">Character Limit Exceeded!</div>
-              <p className="mt-1">
+              <p className="mt-1 mb-3">
                 Your text is {Math.abs(remaining)} characters over the {platformName} limit. 
                 You need to remove {Math.abs(remaining)} characters before posting.
               </p>
+              
+              {/* AI Shorten Button */}
+              {onShortenClick && ['twitter', 'x', 'instagram', 'threads', 'linkedin'].includes(platformId) && (
+                <button
+                  onClick={onShortenClick}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  <span>Shorten for {platformName}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

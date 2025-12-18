@@ -384,6 +384,7 @@ function App() {
       onGeneratePlain={handleGeneratePlain}
       onSave={handleSaveDraft}
       onClear={handleClear}
+      onTextChange={handleInputChange}
     />
   );
 
