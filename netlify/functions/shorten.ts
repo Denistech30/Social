@@ -1,5 +1,4 @@
 import { Handler } from '@netlify/functions';
-import { HfInference } from '@huggingface/inference';
 
 // Rate limiting - simple in-memory store
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
@@ -19,8 +18,9 @@ type Platform = keyof typeof PLATFORM_LIMITS;
 
 interface ShortenRequest {
   text: string;
-  platform: Platform;
+  platform?: Platform;
   limit?: number;
+  maxChars?: number; // Alternative field name for backward compatibility
   options?: {
     keepHashtags?: boolean;
     keepCTA?: boolean;
@@ -30,11 +30,13 @@ interface ShortenRequest {
 
 interface ShortenResponse {
   result: string;
+  shortened: string; // Backward compatibility
   charCount: number;
 }
 
 interface ErrorResponse {
   error: string;
+  details?: any;
 }
 
 // Rate limiting helper
@@ -66,45 +68,89 @@ function cleanupRateLimit() {
   }
 }
 
-export const handler: Handler = async (event, context) => {
-  // Only allow POST requests
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
+// Call Groq API
+async function callGroqAPI(prompt: string, maxTokens: number = 150): Promise<string> {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  
+  if (!groqApiKey) {
+    throw new Error('GROQ_API_KEY environment variable not set');
   }
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${groqApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: maxTokens,
+      top_p: 0.9,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error('Groq API Error:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorData
+    });
+    throw new Error(`Groq API returned ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  
+  if (!content) {
+    console.error('No content in Groq response:', data);
+    throw new Error('No content returned from Groq API');
+  }
+
+  return content.trim();
+}
+
+export const handler: Handler = async (event, context) => {
+  const corsHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
 
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
+      headers: corsHeaders,
       body: '',
     };
   }
 
+  // Only allow POST requests
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
+  }
+
   try {
-    // Check HF token
-    const hfToken = process.env.HF_TOKEN;
-    if (!hfToken) {
-      console.error('HF_TOKEN environment variable not set');
+    // Check Groq API key
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (!groqApiKey) {
+      console.error('GROQ_API_KEY environment variable not set');
       return {
         statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'AI service not configured' }),
       };
     }
@@ -116,10 +162,7 @@ export const handler: Handler = async (event, context) => {
     if (!checkRateLimit(clientIP)) {
       return {
         statusCode: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
       };
     }
@@ -128,10 +171,7 @@ export const handler: Handler = async (event, context) => {
     if (!event.body) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Request body is required' }),
       };
     }
@@ -142,10 +182,7 @@ export const handler: Handler = async (event, context) => {
     } catch (e) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Invalid JSON in request body' }),
       };
     }
@@ -154,24 +191,8 @@ export const handler: Handler = async (event, context) => {
     if (!requestData.text || typeof requestData.text !== 'string') {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Text field is required and must be a string' }),
-      };
-    }
-
-    if (!requestData.platform || !(requestData.platform in PLATFORM_LIMITS)) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ 
-          error: `Platform must be one of: ${Object.keys(PLATFORM_LIMITS).join(', ')}` 
-        }),
       };
     }
 
@@ -179,10 +200,7 @@ export const handler: Handler = async (event, context) => {
     if (requestData.text.length > 8000) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Text too long. Maximum 8000 characters allowed.' }),
       };
     }
@@ -190,179 +208,114 @@ export const handler: Handler = async (event, context) => {
     if (requestData.text.trim().length === 0) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Text cannot be empty' }),
       };
     }
 
-    // Get platform limit
-    const limit = requestData.limit || PLATFORM_LIMITS[requestData.platform];
+    // Determine character limit
+    let maxChars = requestData.maxChars || requestData.limit || 280;
+    
+    // If platform is specified, use its limit
+    if (requestData.platform && requestData.platform in PLATFORM_LIMITS) {
+      maxChars = PLATFORM_LIMITS[requestData.platform];
+    }
+
     const options = requestData.options || {};
 
-    // Initialize Hugging Face client
-    const hf = new HfInference(hfToken);
+    // Construct the prompt for Groq
+    const keepHashtagsText = options.keepHashtags !== false ? 'Keep hashtags and links.' : 'Hashtags can be removed if needed.';
+    const keepCTAText = options.keepCTA !== false ? 'Keep call-to-action phrases.' : 'CTA can be shortened if needed.';
+    const toneText = options.tone ? `Use ${options.tone} tone.` : '';
 
-    // Construct the prompt
-    const systemMessage = `You are a rewriting assistant for social media posts. Your task is to rewrite text to fit character limits while preserving meaning, key facts, and call-to-action.
+    const prompt = `Shorten the following text to <= ${maxChars} characters. Keep meaning, ${keepHashtagsText} ${keepCTAText} Remove filler words, don't change language. ${toneText} Output only the shortened text, no explanations.
 
-CRITICAL RULES:
-- Must output a single rewritten version only
-- Must be <= ${limit} characters (hard requirement)
-- No truncation, no "…"; rewrite instead
-- Keep line breaks if possible
-- Preserve the core message and meaning
-- ${options.keepHashtags ? 'Keep hashtags' : 'Hashtags can be removed if needed'}
-- ${options.keepCTA ? 'Keep call-to-action phrases' : 'CTA can be shortened if needed'}
-- Use ${options.tone || 'neutral'} tone`;
-
-    const userMessage = `Platform: ${requestData.platform.toUpperCase()}
-Character limit: ${limit}
 Original text (${requestData.text.length} characters):
+${requestData.text}`;
 
-${requestData.text}
+    console.log('Shortening request:', {
+      originalLength: requestData.text.length,
+      targetLength: maxChars,
+      platform: requestData.platform || 'unknown'
+    });
 
-Rewrite this to fit within ${limit} characters while preserving the core message.`;
-
-    // Call Hugging Face API using text generation
-    let rewrittenText: string;
+    // Call Groq API
+    let shortenedText: string;
     try {
-      const prompt = `${systemMessage}\n\n${userMessage}\n\nRewritten text:`;
-      
-      const response = await hf.textGeneration({
-        model: 'microsoft/DialoGPT-medium',
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 150,
-          temperature: 0.7,
-          return_full_text: false,
-          stop: ['\n\n', 'Original:', 'User:'],
-        }
-      });
-
-      rewrittenText = response.generated_text?.trim() || '';
-      
-      if (!rewrittenText) {
-        throw new Error('No response from AI model');
-      }
-    } catch (aiError) {
-      console.error('AI API Error:', aiError);
-      
-      // Fallback: try a simpler approach with GPT-2
-      try {
-        const simplePrompt = `Rewrite this social media post to be under ${limit} characters while keeping the main message:\n\n"${requestData.text}"\n\nRewritten:`;
-        
-        const fallbackResponse = await hf.textGeneration({
-          model: 'gpt2',
-          inputs: simplePrompt,
-          parameters: {
-            max_new_tokens: 100,
-            temperature: 0.7,
-            return_full_text: false,
-            stop: ['\n\n', '"'],
-          }
-        });
-
-        rewrittenText = fallbackResponse.generated_text?.trim() || '';
-        
-        if (!rewrittenText) {
-          throw new Error('No response from fallback model');
-        }
-      } catch (fallbackError) {
-        console.error('Fallback AI Error:', fallbackError);
-        return {
-          statusCode: 503,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-          body: JSON.stringify({ 
-            error: 'AI service temporarily unavailable. Please try again later.' 
-          }),
-        };
-      }
+      shortenedText = await callGroqAPI(prompt);
+    } catch (apiError) {
+      console.error('Groq API call failed:', apiError);
+      return {
+        statusCode: 503,
+        headers: corsHeaders,
+        body: JSON.stringify({ 
+          error: 'AI service temporarily unavailable. Please try again later.',
+          details: apiError instanceof Error ? apiError.message : 'Unknown error'
+        }),
+      };
     }
 
     // Validate output length
-    const charCount = [...rewrittenText].length; // Proper Unicode count
+    const charCount = [...shortenedText].length; // Proper Unicode count
     
-    if (charCount > limit) {
+    if (charCount > maxChars) {
+      console.log(`First attempt too long: ${charCount}/${maxChars} chars, retrying with stricter prompt`);
+      
       // Try once more with stricter instruction
       try {
-        const retryPrompt = `Make this text shorter (max ${limit} characters): "${rewrittenText}"\n\nShorter version:`;
-        
-        const retryResponse = await hf.textGeneration({
-          model: 'gpt2',
-          inputs: retryPrompt,
-          parameters: {
-            max_new_tokens: 80,
-            temperature: 0.5,
-            return_full_text: false,
-            stop: ['\n\n', '"'],
-          }
-        });
+        const stricterPrompt = `Make this text shorter. Hard limit: ${maxChars} characters maximum. Remove unnecessary words, keep core meaning. Output only the shortened text:
 
-        const retryText = retryResponse.generated_text?.trim() || rewrittenText;
+${shortenedText}`;
+
+        const retryText = await callGroqAPI(stricterPrompt, 100);
         const retryCount = [...retryText].length;
         
-        if (retryCount <= limit) {
-          rewrittenText = retryText;
+        if (retryCount <= maxChars) {
+          shortenedText = retryText;
+          console.log(`Retry successful: ${retryCount}/${maxChars} chars`);
         } else {
+          console.log(`Retry still too long: ${retryCount}/${maxChars} chars`);
           // Still too long, return error with fallback suggestions
           return {
             statusCode: 422,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
+            headers: corsHeaders,
             body: JSON.stringify({ 
-              error: `AI couldn't shorten to ${limit} characters. Try manual editing or remove some content first.`,
-              suggestions: [
-                'Remove emojis and extra punctuation',
-                'Shorten hashtags or move them to comments',
-                'Remove filler words like "really", "very", "just"',
-                'Use abbreviations where appropriate',
-                'Split into multiple posts if needed'
-              ]
+              error: `AI couldn't shorten to ${maxChars} characters. Try manual editing or remove some content first.`,
+              details: `Generated ${retryCount} characters, needed ${maxChars} or fewer`
             }),
           };
         }
       } catch (retryError) {
-        console.error('Retry AI Error:', retryError);
+        console.error('Retry API call failed:', retryError);
         return {
           statusCode: 422,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
+          headers: corsHeaders,
           body: JSON.stringify({ 
-            error: `AI couldn't shorten to ${limit} characters. Please try manual editing.`,
-            suggestions: [
-              'Remove emojis and extra punctuation',
-              'Shorten hashtags or move them to comments',
-              'Remove filler words like "really", "very", "just"',
-              'Use abbreviations where appropriate',
-              'Split into multiple posts if needed'
-            ]
+            error: `AI couldn't shorten to ${maxChars} characters. Please try manual editing.`,
+            details: retryError instanceof Error ? retryError.message : 'Retry failed'
           }),
         };
       }
     }
 
-    // Return successful response
+    const finalCharCount = [...shortenedText].length;
+    console.log('Shortening successful:', {
+      originalLength: requestData.text.length,
+      finalLength: finalCharCount,
+      targetLength: maxChars,
+      saved: requestData.text.length - finalCharCount
+    });
+
+    // Return successful response with both field names for backward compatibility
     const response: ShortenResponse = {
-      result: rewrittenText,
-      charCount: [...rewrittenText].length,
+      result: shortenedText,
+      shortened: shortenedText, // Backward compatibility
+      charCount: finalCharCount,
     };
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: corsHeaders,
       body: JSON.stringify(response),
     };
 
@@ -370,12 +323,10 @@ Rewrite this to fit within ${limit} characters while preserving the core message
     console.error('Function error:', error);
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: corsHeaders,
       body: JSON.stringify({ 
-        error: 'Internal server error. Please try again later.' 
+        error: 'Internal server error. Please try again later.',
+        details: error instanceof Error ? error.message : 'Unknown error'
       }),
     };
   }

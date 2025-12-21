@@ -85,8 +85,8 @@ TextCraft includes an AI-powered feature to automatically shorten posts that exc
 
 ### Prerequisites
 
-1. **Hugging Face Account**: Create a free account at [huggingface.co](https://huggingface.co)
-2. **API Token**: Generate a User Access Token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+1. **Groq Account**: Create a free account at [console.groq.com](https://console.groq.com)
+2. **API Key**: Generate an API Key at [console.groq.com/keys](https://console.groq.com/keys)
 
 ### Environment Setup
 
@@ -94,7 +94,7 @@ TextCraft includes an AI-powered feature to automatically shorten posts that exc
 
 1. Create a `.env` file in the project root:
 ```bash
-HF_TOKEN=hf_your_token_here
+GROQ_API_KEY=gsk_your_key_here
 ```
 
 2. Start the development server with Netlify Functions:
@@ -107,15 +107,15 @@ npm run dev:netlify
 1. Go to your Netlify site dashboard
 2. Navigate to **Site configuration** → **Environment variables**
 3. Add the environment variable:
-   - **Key**: `HF_TOKEN`
-   - **Value**: `hf_your_token_here`
+   - **Key**: `GROQ_API_KEY`
+   - **Value**: `gsk_your_key_here`
 
 ### How It Works
 
 - When your text exceeds a platform's character limit, an "AI Shorten" button appears
 - Click the button to open the AI rewriting modal
 - Configure options (keep hashtags, tone, etc.)
-- AI generates a shortened version that fits the limit
+- AI generates a shortened version that fits the limit using Groq's fast LLaMA models
 - Review and either copy the suggestion or replace your draft
 
 ### Supported Platforms
