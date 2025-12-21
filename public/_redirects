@@ -1,0 +1,5 @@
+# API routes to Netlify Functions (must be FIRST - specific routes before catch-all)
+/api/*  /.netlify/functions/:splat  200
+
+# SPA catch-all for client-side routing (must be LAST)
+/*      /index.html                200
