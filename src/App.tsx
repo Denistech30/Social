@@ -13,6 +13,7 @@ import Footer from './components/footer/Footer';
 import InstallBanner from './components/pwa/InstallBanner';
 import QrCodeModal from './components/shared/QrCodeModal';
 import { formatText, applyQuickStyle, stripFormatting } from './lib/unicode-transforms';
+import { callAIFormatAPI, renderFormatBlocks } from './lib/ai-format-renderer';
 import { platforms, getPlatformById } from './lib/platforms';
 import { useDrafts } from './hooks/useDrafts';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -49,6 +50,11 @@ function App() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showFloatingCTA, setShowFloatingCTA] = useState(false);
+  
+  // AI Format state
+  const [isAIFormatting, setIsAIFormatting] = useState(false);
+  const [originalTextForUndo, setOriginalTextForUndo] = useState<string>('');
+  const [showUndoToast, setShowUndoToast] = useState(false);
   
   // Toast state
   const [toastMessage, setToastMessage] = useState('');
@@ -353,6 +359,64 @@ function App() {
     setShowQrModal(true);
   };
 
+  // Handle AI Format
+  const handleAIFormat = async () => {
+    if (!inputText.trim() || isAIFormatting) return;
+
+    setIsAIFormatting(true);
+    setOriginalTextForUndo(inputText); // Save for undo
+
+    try {
+      const selectedPlatform = getPlatformById(selectedPlatformId);
+      const platformName = selectedPlatform?.id === 'twitter' ? 'x' : selectedPlatform?.id;
+      
+      const formatResult = await callAIFormatAPI(
+        inputText,
+        platformName || 'facebook',
+        selectedPlatform?.charLimit,
+        {
+          tone: 'neutral',
+          keepHashtags: true,
+          keepCTA: true
+        }
+      );
+
+      // Render blocks into formatted text
+      const formattedOutput = renderFormatBlocks(formatResult.blocks);
+      
+      // Update the input text with formatted result
+      handleInputChange(formattedOutput);
+      
+      // Show success message with undo option
+      showToastMessage('Text formatted successfully!', 'success');
+      setShowUndoToast(true);
+      
+      // Hide undo toast after 10 seconds
+      setTimeout(() => {
+        setShowUndoToast(false);
+      }, 10000);
+
+    } catch (error) {
+      console.error('AI Format error:', error);
+      showToastMessage(
+        error instanceof Error ? error.message : 'AI formatting failed. Please try again.',
+        'error'
+      );
+    } finally {
+      setIsAIFormatting(false);
+    }
+  };
+
+  // Handle undo AI format
+  const handleUndoAIFormat = () => {
+    if (originalTextForUndo) {
+      handleInputChange(originalTextForUndo);
+      setOriginalTextForUndo('');
+      setShowUndoToast(false);
+      showToastMessage('Formatting undone', 'success');
+    }
+  };
+
   // Input Section component
   const inputSection = (
     <InputSection
@@ -368,9 +432,11 @@ function App() {
       onMakeAccessible={handleGeneratePlain}
       onSaveDraft={handleSaveDraft}
       onSaveNewDraft={handleSaveNewDraft}
+      onAIFormat={handleAIFormat}
       canUndo={canUndo}
       canRedo={canRedo}
       hasUnsavedChanges={hasUnsavedChanges}
+      isAIFormatting={isAIFormatting}
     />
   );
 
@@ -474,6 +540,21 @@ function App() {
         show={showToast}
         onClose={() => setShowToast(false)}
       />
+
+      {/* Undo AI Format Toast */}
+      {showUndoToast && (
+        <div className="fixed bottom-4 right-4 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-gray-700">Text formatted successfully!</span>
+            <button
+              onClick={handleUndoAIFormat}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* QR Code Modal */}
       <QrCodeModal open={showQrModal} onOpenChange={setShowQrModal} />
