@@ -74,54 +74,88 @@ function cleanupRateLimit() {
   }
 }
 
-// Call Groq API with structured output
-async function callGroqFormatAPI(prompt: string, platform: Platform): Promise<FormatResponse> {
+// Validate FormatResponse structure
+function validateFormatResponse(data: any): data is FormatResponse {
+  if (!data || typeof data !== 'object') return false;
+  
+  // Check required top-level keys
+  if (typeof data.cleanText !== 'string') return false;
+  if (!Array.isArray(data.removedPhrases)) return false;
+  if (!Array.isArray(data.blocks)) return false;
+  
+  // Validate removedPhrases array
+  if (!data.removedPhrases.every((phrase: any) => typeof phrase === 'string')) return false;
+  
+  // Validate blocks array
+  const validBlockTypes = ['heading', 'subheading', 'paragraph', 'bullets', 'numbered', 'cta', 'hashtags', 'separator'];
+  
+  for (const block of data.blocks) {
+    if (!block || typeof block !== 'object') return false;
+    if (!validBlockTypes.includes(block.type)) return false;
+    
+    // Validate block structure based on type
+    if (['bullets', 'numbered', 'hashtags'].includes(block.type)) {
+      if (!Array.isArray(block.items)) return false;
+      if (!block.items.every((item: any) => typeof item === 'string')) return false;
+    } else if (['heading', 'subheading', 'paragraph', 'cta'].includes(block.type)) {
+      if (typeof block.text !== 'string') return false;
+    }
+    // separator type doesn't require text or items
+  }
+  
+  return true;
+}
+
+// Estimate character count from format response
+function estimateCharacterCount(formatResponse: FormatResponse): number {
+  let totalChars = formatResponse.cleanText.length;
+  
+  // Add estimated characters from blocks
+  for (const block of formatResponse.blocks) {
+    if (block.text) {
+      totalChars += block.text.length + 2; // +2 for line breaks
+    }
+    if (block.items) {
+      totalChars += block.items.reduce((sum, item) => sum + item.length + 3, 0); // +3 for bullet/number + space + line break
+    }
+  }
+  
+  return totalChars;
+}
+
+// Call Groq API with JSON mode
+async function callGroqFormatAPI(prompt: string, platform: Platform, isRetry: boolean = false): Promise<FormatResponse> {
   const groqApiKey = process.env.GROQ_API_KEY;
   
   if (!groqApiKey) {
     throw new Error('GROQ_API_KEY environment variable not set');
   }
 
-  // JSON Schema for structured output
-  const jsonSchema = {
-    name: "format_response",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        cleanText: {
-          type: "string",
-          description: "The original text with LLM wrapper junk removed"
-        },
-        removedPhrases: {
-          type: "array",
-          items: { type: "string" },
-          description: "List of phrases that were removed (like 'Here's your post', etc.)"
-        },
-        blocks: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["heading", "subheading", "paragraph", "bullets", "numbered", "cta", "hashtags", "separator"]
-              },
-              text: { type: "string" },
-              items: {
-                type: "array",
-                items: { type: "string" }
-              }
-            },
-            required: ["type"],
-            additionalProperties: false
-          }
-        }
-      },
-      required: ["cleanText", "removedPhrases", "blocks"],
-      additionalProperties: false
+  const systemMessage = `You are a social media formatting expert. Return ONLY valid JSON. No markdown fences. Return a single JSON object.
+
+Required JSON structure:
+{
+  "cleanText": "string - original text with LLM junk removed",
+  "removedPhrases": ["array of strings - phrases that were removed"],
+  "blocks": [
+    {
+      "type": "heading|subheading|paragraph|bullets|numbered|cta|hashtags|separator",
+      "text": "string - for heading/subheading/paragraph/cta types only",
+      "items": ["array of strings - for bullets/numbered/hashtags types only"]
     }
-  };
+  ]
+}
+
+Block type rules:
+- heading/subheading/paragraph/cta: include "text" field, omit "items"
+- bullets/numbered/hashtags: include "items" array, omit "text" or set to empty string
+- separator: no text/items required
+
+Do not include any other keys. Output must be valid JSON that can be parsed directly.`;
+
+  const userMessage = isRetry 
+    ? `Your previous response was invalid. Return ONLY a single JSON object with keys cleanText, removedPhrases, blocks.\n\n${prompt}`
+    : prompt;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -133,15 +167,18 @@ async function callGroqFormatAPI(prompt: string, platform: Platform): Promise<Fo
       model: 'llama-3.3-70b-versatile',
       messages: [
         {
+          role: 'system',
+          content: systemMessage
+        },
+        {
           role: 'user',
-          content: prompt
+          content: userMessage
         }
       ],
       temperature: 0.3,
       max_tokens: 1000,
       response_format: {
-        type: "json_schema",
-        json_schema: jsonSchema
+        type: "json_object"
       }
     }),
   });
@@ -165,9 +202,16 @@ async function callGroqFormatAPI(prompt: string, platform: Platform): Promise<Fo
   }
 
   try {
-    return JSON.parse(content);
+    const parsedResponse = JSON.parse(content);
+    
+    // Validate the response structure
+    if (!validateFormatResponse(parsedResponse)) {
+      throw new Error('Invalid response structure from AI');
+    }
+    
+    return parsedResponse;
   } catch (parseError) {
-    console.error('Failed to parse Groq JSON response:', content);
+    console.error('Failed to parse or validate Groq JSON response:', content);
     throw new Error('Invalid JSON response from AI');
   }
 }
@@ -311,7 +355,7 @@ CRITICAL RULES:
 Original text to format:
 ${requestData.text}
 
-Return valid JSON matching the schema. Focus on cleaning up LLM junk and structuring for ${platform}.`;
+Return valid JSON matching the required structure. Focus on cleaning up LLM junk and structuring for ${platform}.`;
 
     console.log('Format request:', {
       originalLength: requestData.text.length,
@@ -324,22 +368,67 @@ Return valid JSON matching the schema. Focus on cleaning up LLM junk and structu
     try {
       formatResult = await callGroqFormatAPI(prompt, platform);
     } catch (apiError) {
-      console.error('Groq API call failed:', apiError);
-      return {
-        statusCode: 503,
-        headers: corsHeaders,
-        body: JSON.stringify({ 
-          error: 'AI service temporarily unavailable. Please try again later.',
-          details: apiError instanceof Error ? apiError.message : 'Unknown error'
-        }),
-      };
+      console.error('Initial Groq API call failed:', apiError);
+      
+      // Retry once with stricter prompt
+      try {
+        console.log('Retrying with stricter prompt...');
+        formatResult = await callGroqFormatAPI(prompt, platform, true);
+      } catch (retryError) {
+        console.error('Retry Groq API call failed:', retryError);
+        return {
+          statusCode: 503,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            error: 'AI service temporarily unavailable. Please try again later.',
+            details: retryError instanceof Error ? retryError.message : 'Unknown error'
+          }),
+        };
+      }
+    }
+
+    // Check character limit for non-Facebook platforms
+    if (platform !== 'facebook' && maxChars < PLATFORM_LIMITS.facebook) {
+      const estimatedLength = estimateCharacterCount(formatResult);
+      
+      if (estimatedLength > maxChars) {
+        console.log(`Output too long: ${estimatedLength}/${maxChars} chars, retrying with length constraint`);
+        
+        try {
+          const shorterPrompt = `${prompt}
+
+CRITICAL: Hard limit <= ${maxChars} characters. Prefer shortening paragraphs, reduce bullets, keep meaning. The final formatted output must fit within ${maxChars} characters.`;
+
+          const shorterResult = await callGroqFormatAPI(shorterPrompt, platform, true);
+          const shorterLength = estimateCharacterCount(shorterResult);
+          
+          if (shorterLength <= maxChars) {
+            formatResult = shorterResult;
+            console.log(`Length constraint retry successful: ${shorterLength}/${maxChars} chars`);
+          } else {
+            console.log(`Length constraint retry still too long: ${shorterLength}/${maxChars} chars`);
+            return {
+              statusCode: 422,
+              headers: corsHeaders,
+              body: JSON.stringify({ 
+                error: `AI couldn't format to ${maxChars} characters. Try manual editing or use a longer platform.`,
+                details: `Generated ${shorterLength} characters, needed ${maxChars} or fewer`
+              }),
+            };
+          }
+        } catch (lengthRetryError) {
+          console.error('Length constraint retry failed:', lengthRetryError);
+          // Continue with original result rather than failing completely
+        }
+      }
     }
 
     console.log('Format successful:', {
       originalLength: requestData.text.length,
       cleanedLength: formatResult.cleanText.length,
       blocksCount: formatResult.blocks.length,
-      removedPhrasesCount: formatResult.removedPhrases.length
+      removedPhrasesCount: formatResult.removedPhrases.length,
+      estimatedFinalLength: estimateCharacterCount(formatResult)
     });
 
     return {
