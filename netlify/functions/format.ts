@@ -28,10 +28,16 @@ interface FormatRequest {
   };
 }
 
+interface HighlightSpan {
+  text: string; // exact substring from the block
+  style?: 'bold' | 'italic' | 'underline'; // optional, default bold
+}
+
 interface FormatBlock {
   type: 'heading' | 'subheading' | 'paragraph' | 'bullets' | 'numbered' | 'cta' | 'hashtags' | 'separator';
   text?: string;
   items?: string[];
+  highlights?: HighlightSpan[];
 }
 
 interface FormatResponse {
@@ -96,6 +102,16 @@ function validateFormatResponse(data: any): data is FormatResponse {
       if (typeof block.text !== 'string') return false;
     }
     // separator type doesn't require text or items
+    
+    // Validate highlights if present
+    if (block.highlights !== undefined) {
+      if (!Array.isArray(block.highlights)) return false;
+      for (const highlight of block.highlights) {
+        if (!highlight || typeof highlight !== 'object') return false;
+        if (typeof highlight.text !== 'string') return false;
+        if (highlight.style !== undefined && !['bold', 'italic', 'underline'].includes(highlight.style)) return false;
+      }
+    }
   }
   
   return true;
@@ -126,21 +142,75 @@ async function callGroqFormatAPI(prompt: string, platform: Platform, isRetry: bo
     throw new Error('GROQ_API_KEY environment variable not set');
   }
 
-  const systemMessage = `You are a text formatter, not a writer. Your job is to ONLY organize the user's text into structured blocks for styling (heading/subheading/paragraph/bullets/numbered/cta/hashtags/separator). ABSOLUTE RULES:
+  const systemMessage = `You are a text formatter, not a writer. Your job is to ONLY organize the user's text into structured blocks for styling (heading, subheading, paragraph, bullets, numbered, cta, hashtags, separator).
 
-Do NOT rewrite, paraphrase, summarize, expand, or shorten the user's message.
-Copy the user's original wording as-is.
-Allowed edits are limited to removing LLM wrapper junk and fixing whitespace.
-Keep links and hashtags EXACTLY unchanged.
-Output ONLY valid JSON. No markdown. No extra text.
+ABSOLUTE RULES:
+- Do NOT rewrite, paraphrase, summarize, expand, or shorten the user's message.
+- Preserve the user's wording as much as possible.
+- Allowed edits:
+  - Remove LLM wrapper junk such as "Here's your post", "As an AI", "The post starts here", etc.
+  - Fix whitespace and spacing (trim, collapse extra blank lines).
+  - Very small structural edits to isolate a list item or heading (e.g. split a long sentence) without changing the actual phrases.
+- Keep links and hashtags EXACTLY unchanged.
+- Output ONLY valid JSON. No markdown. No backticks. No explanations or comments.
 
-OUTPUT JSON SHAPE: { "cleanText": string, "removedPhrases": string[], "blocks": Array< | {"type":"heading","text":string} | {"type":"subheading","text":string} | {"type":"paragraph","text":string} | {"type":"bullets","items":string[]} | {"type":"numbered","items":string[]} | {"type":"cta","text":string} | {"type":"hashtags","items":string[]} | {"type":"separator"}>}
+OUTPUT JSON SHAPE:
+{
+  "cleanText": string,
+  "removedPhrases": string[],
+  "blocks": Array<
+    | {
+        "type": "heading" | "subheading" | "paragraph" | "cta";
+        "text": string;
+        "highlights"?: { "text": string; "style"?: "bold" | "italic" | "underline" }[];
+      }
+    | {
+        "type": "bullets" | "numbered" | "hashtags";
+        "items": string[];
+        "highlights"?: { "text": string; "style"?: "bold" | "italic" | "underline" }[];
+      }
+    | {
+        "type": "separator";
+        "highlights"?: { "text": string; "style"?: "bold" | "italic" | "underline" }[];
+      }
+  >
+}
 
-Block rules:
-bullets/numbered/hashtags must use items (string[]).
-heading/subheading/paragraph/cta must use text (string).
-Do not invent content. Use only text taken from the input (minus junk removal/whitespace fixes).
-Do not add any extra keys.`;
+BLOCK RULES:
+- "heading": strong hook or main title line taken from the text.
+- "subheading": label-like or secondary lines such as "Problem:", "Solution:", "Benefits", "What you'll learn", etc.
+- "paragraph": normal body text.
+- "bullets": use when there are multiple related items (tips, features, benefits, problems, ideas) — each item must be copied from the original text.
+- "numbered": use for step-by-step or ordered processes, again copying original text.
+- "cta": lines that ask the reader to do something (comment, like, share, DM, sign up, join, register, click).
+- "hashtags": group all hashtags together, preserving each hashtag exactly as written.
+- "separator": use sparingly for visual breaks between sections.
+
+LIST EXTRACTION:
+- Whenever the text naturally contains several related points, steps, tips, features, mistakes, or ideas, group them into a "bullets" or "numbered" block.
+- Use the original sentences or clauses as list items. Do not invent new items.
+
+SUBHEADINGS:
+- If a line acts as a label like "Problem:", "Solution:", "Benefits:", "Key features", "What you'll learn", "Step 1", etc., turn it into a "subheading" block.
+- Use the line verbatim (minus trailing punctuation if necessary).
+
+HIGHLIGHTS:
+- Each block can have an optional "highlights" array for important words or short phrases that should stand out visually.
+- Choose 3–8 highlights per block at most. Do not over-highlight.
+- Good candidates:
+  - Person names (creators, experts, authors).
+  - Brand names and product names.
+  - Platform names (Facebook, TikTok, X, LinkedIn, Instagram, YouTube, etc.).
+  - Event names, dates, times, locations.
+  - Strong hook phrases and impact words like "free class", "beta access", "limited offer", "launch", "giveaway".
+- Each highlight object:
+  { "text": string, "style"?: "bold" | "italic" | "underline" }
+- "text" must be a substring of the block's text or one of its items, copied exactly.
+- If not specified, assume "style" = "bold".
+
+CONSTRAINT:
+- At least 90% of the words in your output blocks must come from the original input text (after removing junk). This is a formatting task, not a rewriting task.
+- Do NOT add any extra keys to the JSON beyond those described above.`;
 
   const userMessage = isRetry 
     ? `Your previous response was invalid. Return ONLY a single JSON object with keys cleanText, removedPhrases, blocks.\n\n${prompt}`
@@ -306,26 +376,30 @@ export const handler: Handler = async (event) => {
     const maxChars = requestData.maxChars || PLATFORM_LIMITS[platform] || PLATFORM_LIMITS.facebook;
     const options = requestData.options || {};
 
-    // Construct the prompt for Groq - formatting only, no rewriting
-    const prompt = `FORMATTER TASK: Analyze the input text and split it into formatting blocks to make it look good with Unicorn styles. Do NOT change the wording.
+    // Construct the prompt for Groq - enhanced formatting with highlights
+    const prompt = `FORMATTER TASK: Analyze the input text and split it into formatting blocks to make it look visually strong with headings, subheadings, paragraphs, bullets, numbered lists, CTAs, hashtags, and separators.
 
-What counts as formatting (allowed):
-Detect a strong first line as a heading (if present or can be extracted verbatim from the text).
-Identify subheadings that already exist in the text (verbatim).
-Split long text into short paragraphs (same sentences, just grouped).
-Convert existing enumerations into bullets or numbered steps WITHOUT rewriting.
-Extract hashtags into a hashtags block (keep each hashtag exactly, just grouped).
-Detect CTA lines already present (e.g., 'Comment…', 'DM me…', 'Try…') and put them in a cta block (verbatim).
+IMPORTANT:
+- Do NOT change the message or tone.
+- Do NOT rewrite or shorten.
+- Only remove obvious junk like "Here's your post", "As an AI", "The post starts here/ends here", "Let me know if you want another version".
+- Preserve all links and hashtags exactly.
 
-What is NOT allowed:
-No rewriting.
-No new words.
-No summarizing.
-No shortening for platform limits.
+FORMAT BEHAVIOR:
+- Identify a strong first line or hook that can be used as a "heading" block if it exists in the text.
+- Detect label-like lines and convert them to "subheading" blocks (e.g. "Problem:", "Solution:", "Benefits:", "How it works", "What you'll learn").
+- Break long content into short "paragraph" blocks while keeping sentences unchanged.
+- When you see multiple related points (benefits, features, steps, ideas, mistakes, tips), turn them into a "bullets" or "numbered" block using the original sentences or clauses as list items.
+- Move all hashtags into a "hashtags" block, preserving each hashtag exactly.
+- Identify call-to-action lines ("Comment below", "DM me", "Sign up", "Join the waitlist", "Share this") and place them in "cta" blocks.
 
-INPUT TEXT: <<< ${requestData.text}
+HIGHLIGHTS:
+- Inside each block, identify important names, brands, platforms, dates, and high-impact phrases.
+- Add them to the block's "highlights" array so they can be styled (bold/italic/underline) by the client.
 
-Return ONLY the JSON object.`;
+INPUT TEXT: <<< ${requestData.text} >>>
+
+Return ONLY the JSON object described in the system message.`;
 
     // Call Groq API
     let formatResult: FormatResponse;

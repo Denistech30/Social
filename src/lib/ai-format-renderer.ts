@@ -1,15 +1,64 @@
-import { convertToExtraBold, convertToBold, addUnderline } from './unicode-transforms';
+import { convertToExtraBold, convertToBold, addUnderline, convertToItalic } from './unicode-transforms';
+
+export interface HighlightSpan {
+  text: string; // exact substring from the block
+  style?: 'bold' | 'italic' | 'underline'; // optional, default bold
+}
 
 export interface FormatBlock {
   type: 'heading' | 'subheading' | 'paragraph' | 'bullets' | 'numbered' | 'cta' | 'hashtags' | 'separator';
   text?: string;
   items?: string[];
+  highlights?: HighlightSpan[];
 }
 
 export interface FormatResponse {
   cleanText: string;
   removedPhrases: string[];
   blocks: FormatBlock[];
+}
+
+/**
+ * Applies highlights to a text string
+ */
+function applyHighlights(text: string, highlights?: HighlightSpan[]): string {
+  if (!highlights || highlights.length === 0) {
+    return text;
+  }
+
+  let result = text;
+  
+  // Sort highlights by position (longest first to avoid conflicts)
+  const sortedHighlights = [...highlights].sort((a, b) => b.text.length - a.text.length);
+  
+  for (const highlight of sortedHighlights) {
+    const { text: highlightText, style = 'bold' } = highlight;
+    
+    // Find the highlight text in the result
+    const index = result.indexOf(highlightText);
+    if (index === -1) continue;
+    
+    // Apply the appropriate style transformation
+    let styledText: string;
+    switch (style) {
+      case 'bold':
+        styledText = convertToBold(highlightText);
+        break;
+      case 'italic':
+        styledText = convertToItalic(highlightText);
+        break;
+      case 'underline':
+        styledText = addUnderline(highlightText);
+        break;
+      default:
+        styledText = convertToBold(highlightText);
+    }
+    
+    // Replace the text with the styled version
+    result = result.substring(0, index) + styledText + result.substring(index + highlightText.length);
+  }
+  
+  return result;
 }
 
 /**
@@ -22,52 +71,66 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
     switch (block.type) {
       case 'heading':
         if (block.text) {
-          // Use extra bold for main headings (unicorn heading style)
-          renderedParts.push(convertToExtraBold(block.text.toUpperCase()));
+          // Apply highlights first, then extra bold for main headings
+          const highlightedText = applyHighlights(block.text, block.highlights);
+          renderedParts.push(convertToExtraBold(highlightedText.toUpperCase()));
         }
         break;
 
       case 'subheading':
         if (block.text) {
-          // Use regular bold with underline for subheadings
-          renderedParts.push(addUnderline(convertToBold(block.text)));
+          // Apply highlights first, then bold with underline for subheadings
+          const highlightedText = applyHighlights(block.text, block.highlights);
+          renderedParts.push(addUnderline(convertToBold(highlightedText)));
         }
         break;
 
       case 'paragraph':
         if (block.text) {
-          // Keep paragraphs as plain text with proper spacing
-          renderedParts.push(block.text);
+          // Apply highlights to paragraphs, keep as plain text with proper spacing
+          const highlightedText = applyHighlights(block.text, block.highlights);
+          renderedParts.push(highlightedText);
         }
         break;
 
       case 'bullets':
         if (block.items && block.items.length > 0) {
-          // Convert to bullet list
-          const bulletList = block.items.map(item => `• ${item}`).join('\n');
+          // Apply highlights to each bullet item
+          const bulletList = block.items.map(item => {
+            const highlightedItem = applyHighlights(item, block.highlights);
+            return `• ${highlightedItem}`;
+          }).join('\n');
           renderedParts.push(bulletList);
         }
         break;
 
       case 'numbered':
         if (block.items && block.items.length > 0) {
-          // Convert to numbered list
-          const numberedList = block.items.map((item, index) => `${index + 1}. ${item}`).join('\n');
+          // Apply highlights to each numbered item
+          const numberedList = block.items.map((item, index) => {
+            const highlightedItem = applyHighlights(item, block.highlights);
+            return `${index + 1}. ${highlightedItem}`;
+          }).join('\n');
           renderedParts.push(numberedList);
         }
         break;
 
       case 'cta':
         if (block.text) {
-          // Make CTA bold to stand out
-          renderedParts.push(convertToBold(block.text));
+          // Apply highlights first, then make CTA bold to stand out
+          const highlightedText = applyHighlights(block.text, block.highlights);
+          renderedParts.push(convertToBold(highlightedText));
         }
         break;
 
       case 'hashtags':
         if (block.items && block.items.length > 0) {
-          // Join hashtags on one line
-          const hashtagLine = block.items.map(tag => tag.startsWith('#') ? tag : `#${tag}`).join(' ');
+          // Apply highlights to hashtags, join on one line
+          const highlightedHashtags = block.items.map(tag => {
+            const properTag = tag.startsWith('#') ? tag : `#${tag}`;
+            return applyHighlights(properTag, block.highlights);
+          });
+          const hashtagLine = highlightedHashtags.join(' ');
           renderedParts.push(hashtagLine);
         }
         break;
@@ -80,7 +143,8 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
       default:
         // Fallback for unknown block types
         if (block.text) {
-          renderedParts.push(block.text);
+          const highlightedText = applyHighlights(block.text, block.highlights);
+          renderedParts.push(highlightedText);
         }
         break;
     }

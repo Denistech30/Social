@@ -90,3 +90,22 @@ export interface CopyResult {
   method: 'modern' | 'standard' | 'legacy' | 'failed';
   format: CopyFormat;
 }
+
+// AI Format types
+export interface HighlightSpan {
+  text: string; // exact substring from the block
+  style?: 'bold' | 'italic' | 'underline'; // optional, default bold
+}
+
+export interface FormatBlock {
+  type: 'heading' | 'subheading' | 'paragraph' | 'bullets' | 'numbered' | 'cta' | 'hashtags' | 'separator';
+  text?: string;
+  items?: string[];
+  highlights?: HighlightSpan[]; // NEW
+}
+
+export interface FormatResponse {
+  cleanText: string;
+  removedPhrases: string[];
+  blocks: FormatBlock[];
+}
