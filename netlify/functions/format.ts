@@ -40,11 +40,6 @@ interface FormatResponse {
   blocks: FormatBlock[];
 }
 
-interface ErrorResponse {
-  error: string;
-  details?: any;
-}
-
 // Rate limiting helper
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -131,27 +126,21 @@ async function callGroqFormatAPI(prompt: string, platform: Platform, isRetry: bo
     throw new Error('GROQ_API_KEY environment variable not set');
   }
 
-  const systemMessage = `You are a social media formatting expert. Return ONLY valid JSON. No markdown fences. Return a single JSON object.
+  const systemMessage = `You are a text formatter, not a writer. Your job is to ONLY organize the user's text into structured blocks for styling (heading/subheading/paragraph/bullets/numbered/cta/hashtags/separator). ABSOLUTE RULES:
 
-Required JSON structure:
-{
-  "cleanText": "string - original text with LLM junk removed",
-  "removedPhrases": ["array of strings - phrases that were removed"],
-  "blocks": [
-    {
-      "type": "heading|subheading|paragraph|bullets|numbered|cta|hashtags|separator",
-      "text": "string - for heading/subheading/paragraph/cta types only",
-      "items": ["array of strings - for bullets/numbered/hashtags types only"]
-    }
-  ]
-}
+Do NOT rewrite, paraphrase, summarize, expand, or shorten the user's message.
+Copy the user's original wording as-is.
+Allowed edits are limited to removing LLM wrapper junk and fixing whitespace.
+Keep links and hashtags EXACTLY unchanged.
+Output ONLY valid JSON. No markdown. No extra text.
 
-Block type rules:
-- heading/subheading/paragraph/cta: include "text" field, omit "items"
-- bullets/numbered/hashtags: include "items" array, omit "text" or set to empty string
-- separator: no text/items required
+OUTPUT JSON SHAPE: { "cleanText": string, "removedPhrases": string[], "blocks": Array< | {"type":"heading","text":string} | {"type":"subheading","text":string} | {"type":"paragraph","text":string} | {"type":"bullets","items":string[]} | {"type":"numbered","items":string[]} | {"type":"cta","text":string} | {"type":"hashtags","items":string[]} | {"type":"separator"}>}
 
-Do not include any other keys. Output must be valid JSON that can be parsed directly.`;
+Block rules:
+bullets/numbered/hashtags must use items (string[]).
+heading/subheading/paragraph/cta must use text (string).
+Do not invent content. Use only text taken from the input (minus junk removal/whitespace fixes).
+Do not add any extra keys.`;
 
   const userMessage = isRetry 
     ? `Your previous response was invalid. Return ONLY a single JSON object with keys cleanText, removedPhrases, blocks.\n\n${prompt}`
@@ -216,7 +205,7 @@ Do not include any other keys. Output must be valid JSON that can be parsed dire
   }
 }
 
-export const handler: Handler = async (event, context) => {
+export const handler: Handler = async (event) => {
   const corsHeaders = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
@@ -317,51 +306,26 @@ export const handler: Handler = async (event, context) => {
     const maxChars = requestData.maxChars || PLATFORM_LIMITS[platform] || PLATFORM_LIMITS.facebook;
     const options = requestData.options || {};
 
-    // Construct the prompt for Groq
-    const platformGuidance = platform === 'facebook' 
-      ? 'Facebook long-form: prioritize readability and structure (hook, short paragraphs, bullets/steps when helpful), not aggressive shortening.'
-      : `${platform.toUpperCase()}: optimize for ${maxChars} character limit while maintaining readability.`;
+    // Construct the prompt for Groq - formatting only, no rewriting
+    const prompt = `FORMATTER TASK: Analyze the input text and split it into formatting blocks to make it look good with Unicorn styles. Do NOT change the wording.
 
-    const toneGuidance = options.tone ? `Use ${options.tone} tone.` : 'Use neutral tone.';
-    const hashtagGuidance = options.keepHashtags !== false ? 'Keep hashtags.' : 'Hashtags can be removed if needed.';
-    const ctaGuidance = options.keepCTA !== false ? 'Keep call-to-action phrases.' : 'CTA can be shortened if needed.';
+What counts as formatting (allowed):
+Detect a strong first line as a heading (if present or can be extracted verbatim from the text).
+Identify subheadings that already exist in the text (verbatim).
+Split long text into short paragraphs (same sentences, just grouped).
+Convert existing enumerations into bullets or numbered steps WITHOUT rewriting.
+Extract hashtags into a hashtags block (keep each hashtag exactly, just grouped).
+Detect CTA lines already present (e.g., 'Comment…', 'DM me…', 'Try…') and put them in a cta block (verbatim).
 
-    const prompt = `You are a social media formatting expert. Your task is to clean up and structure social media text.
+What is NOT allowed:
+No rewriting.
+No new words.
+No summarizing.
+No shortening for platform limits.
 
-CRITICAL RULES:
-1. Remove ALL "LLM wrapper junk" like:
-   - "Here's your post" / "Here's the post"
-   - "Let me know if you want another version"
-   - "The post starts here / ends here"
-   - "Sure, I can help" / "As an AI..."
-   - Any headings like "Caption:" "Post:" unless they belong to the actual content
-   - "Hope this helps" / "Feel free to modify"
+INPUT TEXT: <<< ${requestData.text}
 
-2. Keep meaning and language - do NOT rewrite facts or change the core message
-3. Preserve links and hashtags exactly as they are
-4. ${platformGuidance}
-5. ${toneGuidance} ${hashtagGuidance} ${ctaGuidance}
-
-6. Structure the output as blocks:
-   - heading: Strong hook line (use for main title/hook)
-   - subheading: Secondary important line
-   - paragraph: Regular text content (keep paragraphs short)
-   - bullets: Use when listing benefits/features/steps
-   - numbered: Use for step-by-step processes
-   - cta: Call-to-action phrases
-   - hashtags: Group hashtags together
-   - separator: Use sparingly for visual breaks
-
-Original text to format:
-${requestData.text}
-
-Return valid JSON matching the required structure. Focus on cleaning up LLM junk and structuring for ${platform}.`;
-
-    console.log('Format request:', {
-      originalLength: requestData.text.length,
-      platform,
-      maxChars
-    });
+Return ONLY the JSON object.`;
 
     // Call Groq API
     let formatResult: FormatResponse;
@@ -384,42 +348,6 @@ Return valid JSON matching the required structure. Focus on cleaning up LLM junk
             details: retryError instanceof Error ? retryError.message : 'Unknown error'
           }),
         };
-      }
-    }
-
-    // Check character limit for non-Facebook platforms
-    if (platform !== 'facebook' && maxChars < PLATFORM_LIMITS.facebook) {
-      const estimatedLength = estimateCharacterCount(formatResult);
-      
-      if (estimatedLength > maxChars) {
-        console.log(`Output too long: ${estimatedLength}/${maxChars} chars, retrying with length constraint`);
-        
-        try {
-          const shorterPrompt = `${prompt}
-
-CRITICAL: Hard limit <= ${maxChars} characters. Prefer shortening paragraphs, reduce bullets, keep meaning. The final formatted output must fit within ${maxChars} characters.`;
-
-          const shorterResult = await callGroqFormatAPI(shorterPrompt, platform, true);
-          const shorterLength = estimateCharacterCount(shorterResult);
-          
-          if (shorterLength <= maxChars) {
-            formatResult = shorterResult;
-            console.log(`Length constraint retry successful: ${shorterLength}/${maxChars} chars`);
-          } else {
-            console.log(`Length constraint retry still too long: ${shorterLength}/${maxChars} chars`);
-            return {
-              statusCode: 422,
-              headers: corsHeaders,
-              body: JSON.stringify({ 
-                error: `AI couldn't format to ${maxChars} characters. Try manual editing or use a longer platform.`,
-                details: `Generated ${shorterLength} characters, needed ${maxChars} or fewer`
-              }),
-            };
-          }
-        } catch (lengthRetryError) {
-          console.error('Length constraint retry failed:', lengthRetryError);
-          // Continue with original result rather than failing completely
-        }
       }
     }
 
