@@ -1,8 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, RotateCcw, RotateCw, FlipHorizontal, FlipVertical, Type, Undo, Redo, Save } from 'lucide-react';
-// @ts-ignore - Fabric.js types might not be perfect
-import { fabric } from 'fabric';
 import type { EditedImage } from '../../types';
+
+// Import Fabric.js for Vite - using dynamic import to ensure proper loading
+let fabric: any = null;
+
+// Dynamically import fabric
+const loadFabric = async () => {
+  if (!fabric) {
+    const fabricModule = await import('fabric');
+    fabric = fabricModule.fabric || fabricModule.default || fabricModule;
+  }
+  return fabric;
+};
 
 interface ImageEditorModalProps {
   isOpen: boolean;
@@ -17,32 +27,63 @@ interface FilterPreset {
   filters: any[];
 }
 
-const FILTER_PRESETS: FilterPreset[] = [
+// Create filter presets function to ensure fabric is loaded
+const createFilterPresets = (): FilterPreset[] => [
   { id: 'original', name: 'Original', filters: [] },
-  { id: 'bright', name: 'Bright', filters: [new (fabric as any).Image.filters.Brightness({ brightness: 0.2 })] },
-  { id: 'warm', name: 'Warm', filters: [new (fabric as any).Image.filters.ColorMatrix({ matrix: [1.2, 0, 0, 0, 0, 0, 1.1, 0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0, 0, 1, 0] })] },
-  { id: 'cool', name: 'Cool', filters: [new (fabric as any).Image.filters.ColorMatrix({ matrix: [0.8, 0, 0, 0, 0, 0, 1.1, 0, 0, 0, 0, 0, 1.2, 0, 0, 0, 0, 0, 1, 0] })] },
-  { id: 'bw', name: 'B&W', filters: [new (fabric as any).Image.filters.Grayscale()] },
+  { 
+    id: 'bright', 
+    name: 'Bright', 
+    filters: fabric?.Image?.filters ? [new fabric.Image.filters.Brightness({ brightness: 0.2 })] : []
+  },
+  { 
+    id: 'warm', 
+    name: 'Warm', 
+    filters: fabric?.Image?.filters ? [new fabric.Image.filters.ColorMatrix({ 
+      matrix: [1.2, 0, 0, 0, 0, 0, 1.1, 0, 0, 0, 0, 0, 0.8, 0, 0, 0, 0, 0, 1, 0] 
+    })] : []
+  },
+  { 
+    id: 'cool', 
+    name: 'Cool', 
+    filters: fabric?.Image?.filters ? [new fabric.Image.filters.ColorMatrix({ 
+      matrix: [0.8, 0, 0, 0, 0, 0, 1.1, 0, 0, 0, 0, 0, 1.2, 0, 0, 0, 0, 0, 1, 0] 
+    })] : []
+  },
+  { 
+    id: 'bw', 
+    name: 'B&W', 
+    filters: fabric?.Image?.filters ? [new fabric.Image.filters.Grayscale()] : []
+  },
 ];
 
 export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave }: ImageEditorModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
-  const imageObjectRef = useRef<fabric.Image | null>(null);
+  const fabricCanvasRef = useRef<any>(null);
+  const imageObjectRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
+  const [fabricLoaded, setFabricLoaded] = useState(false);
   
   // Adjustment states
   const [brightness, setBrightness] = useState(0);
   const [contrast, setContrast] = useState(0);
   const [saturation, setSaturation] = useState(0);
 
+  // Load Fabric.js when component mounts
+  useEffect(() => {
+    loadFabric().then(() => {
+      setFabricLoaded(true);
+      setFilterPresets(createFilterPresets());
+    });
+  }, []);
+
   // Initialize canvas
   useEffect(() => {
-    if (!isOpen || !canvasRef.current) return;
+    if (!isOpen || !canvasRef.current || !fabricLoaded || !fabric) return;
 
-    const canvas = new (fabric as any).Canvas(canvasRef.current, {
+    const canvas = new fabric.Canvas(canvasRef.current, {
       width: 800,
       height: 600,
       backgroundColor: '#f8f9fa',
@@ -59,7 +100,7 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
       canvas.dispose();
       fabricCanvasRef.current = null;
     };
-  }, [isOpen, initialImage]);
+  }, [isOpen, initialImage, fabricLoaded]);
 
   // Save state to history
   const saveToHistory = useCallback(() => {
@@ -74,10 +115,10 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
 
   // Load image onto canvas
   const loadImage = useCallback((imageSrc: string) => {
-    if (!fabricCanvasRef.current) return;
+    if (!fabricCanvasRef.current || !fabric) return;
 
     setIsLoading(true);
-    (fabric as any).Image.fromURL(imageSrc, (img: any) => {
+    fabric.Image.fromURL(imageSrc, (img: any) => {
       if (!fabricCanvasRef.current) return;
 
       // Scale image to fit canvas while maintaining aspect ratio
@@ -106,20 +147,20 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
 
   // Apply adjustments
   const applyAdjustments = useCallback(() => {
-    if (!imageObjectRef.current) return;
+    if (!imageObjectRef.current || !fabric?.Image?.filters) return;
 
     const filters = [];
     
     if (brightness !== 0) {
-      filters.push(new (fabric as any).Image.filters.Brightness({ brightness: brightness / 100 }));
+      filters.push(new fabric.Image.filters.Brightness({ brightness: brightness / 100 }));
     }
     
     if (contrast !== 0) {
-      filters.push(new (fabric as any).Image.filters.Contrast({ contrast: contrast / 100 }));
+      filters.push(new fabric.Image.filters.Contrast({ contrast: contrast / 100 }));
     }
     
     if (saturation !== 0) {
-      filters.push(new (fabric as any).Image.filters.Saturation({ saturation: saturation / 100 }));
+      filters.push(new fabric.Image.filters.Saturation({ saturation: saturation / 100 }));
     }
 
     imageObjectRef.current.filters = filters;
@@ -173,9 +214,9 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
 
   // Add text
   const addText = () => {
-    if (!fabricCanvasRef.current) return;
+    if (!fabricCanvasRef.current || !fabric) return;
 
-    const text = new (fabric as any).IText('Add your text', {
+    const text = new fabric.IText('Add your text', {
       left: fabricCanvasRef.current.width! / 2,
       top: fabricCanvasRef.current.height! / 2,
       fontFamily: 'Arial',
@@ -256,6 +297,17 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
   };
 
   if (!isOpen) return null;
+
+  if (!fabricLoaded) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg p-8 flex flex-col items-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Loading image editor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
@@ -372,7 +424,7 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
             <div className="mb-6">
               <h3 className="font-semibold mb-3">Filters</h3>
               <div className="grid grid-cols-2 gap-2">
-                {FILTER_PRESETS.map((preset) => (
+                {filterPresets.map((preset) => (
                   <button
                     key={preset.id}
                     onClick={() => applyFilter(preset)}
