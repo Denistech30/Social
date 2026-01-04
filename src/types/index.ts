@@ -109,3 +109,16 @@ export interface FormatResponse {
   removedPhrases: string[];
   blocks: FormatBlock[];
 }
+
+// Image Editor types
+export interface EditedImage {
+  blob: Blob;
+  dataUrl: string;
+}
+
+export interface ImageEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialImage?: string | null;
+  onSave: (editedImage: EditedImage) => void;
+}

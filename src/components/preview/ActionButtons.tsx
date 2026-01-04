@@ -1,10 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
-import { Copy, Save, X, Check, Loader2, Info, QrCode } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Copy, Save, X, Check, Loader2, Info, QrCode, Download } from 'lucide-react';
 import { smartCopy } from '../../lib/copy-system';
-import type { CopyFormat } from '../../types';
+import type { CopyFormat, EditedImage } from '../../types';
 import { useResponsive } from '../../hooks/useResponsive';
 import QrCodeModal from '../shared/QrCodeModal';
 import QRTooltip from '../shared/QRTooltip';
+import ImageUploadButton from '../shared/ImageUploadButton';
+import ImagePreview from '../shared/ImagePreview';
+import ImageEditorModal from '../shared/ImageEditorModal';
 import { 
   hasSeenQRFeature, 
   markQRFeatureAsSeen, 
@@ -27,6 +30,9 @@ export default function ActionButtons({ text, onSave, onClear, isUserTyping = fa
   const [showFormats, setShowFormats] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showCopyNudge, setShowCopyNudge] = useState(false);
+  const [editedImage, setEditedImage] = useState<EditedImage | null>(null);
+  const [showImageEditor, setShowImageEditor] = useState(false);
+  const [initialImageForEditor, setInitialImageForEditor] = useState<string | null>(null);
   const { isMobile } = useResponsive();
   const qrButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -76,8 +82,61 @@ export default function ActionButtons({ text, onSave, onClear, isUserTyping = fa
     handleQRClick();
   };
 
+  // Image editor handlers
+  const handleImageSelect = (imageDataUrl: string) => {
+    setInitialImageForEditor(imageDataUrl);
+    setShowImageEditor(true);
+  };
+
+  const handleImageSave = (image: EditedImage) => {
+    setEditedImage(image);
+    setShowImageEditor(false);
+  };
+
+  const handleImageEdit = () => {
+    if (editedImage) {
+      setInitialImageForEditor(editedImage.dataUrl);
+      setShowImageEditor(true);
+    }
+  };
+
+  const handleImageRemove = () => {
+    setEditedImage(null);
+  };
+
+  const handleDownloadImage = () => {
+    if (!editedImage) return;
+
+    const now = new Date();
+    const timestamp = now.toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
+    const filename = `textcraft-post-${timestamp}.jpg`;
+
+    const link = document.createElement('a');
+    link.href = editedImage.dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-3">
+      {/* Image Editor Section */}
+      <div className="space-y-3">
+        {editedImage ? (
+          <ImagePreview
+            image={editedImage}
+            onEdit={handleImageEdit}
+            onRemove={handleImageRemove}
+          />
+        ) : (
+          <ImageUploadButton
+            onImageSelect={handleImageSelect}
+            hasImage={!!editedImage}
+          />
+        )}
+      </div>
+
       {/* Primary Copy Button - Enhanced with shimmer effect */}
       <button
         onClick={() => handleCopy('unicode')}
@@ -208,6 +267,18 @@ export default function ActionButtons({ text, onSave, onClear, isUserTyping = fa
           )}
         </button>
 
+        {editedImage && (
+          <button
+            onClick={handleDownloadImage}
+            className="h-12 px-4 rounded-xl flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 active:scale-95"
+            type="button"
+            title="Download edited image"
+          >
+            <Download className="w-5 h-5" />
+            <span className="hidden sm:inline">Image</span>
+          </button>
+        )}
+
         <button
           onClick={onClear}
           disabled={!text}
@@ -221,13 +292,21 @@ export default function ActionButtons({ text, onSave, onClear, isUserTyping = fa
 
       {/* QR Tooltip */}
       <QRTooltip 
-        targetRef={qrButtonRef}
+        targetRef={qrButtonRef as React.RefObject<HTMLElement>}
         isUserTyping={isUserTyping}
         onTryIt={handleTooltipTryIt}
       />
 
       {/* QR Code Modal */}
       <QrCodeModal open={showQrModal} onOpenChange={setShowQrModal} />
+
+      {/* Image Editor Modal */}
+      <ImageEditorModal
+        isOpen={showImageEditor}
+        onClose={() => setShowImageEditor(false)}
+        initialImage={initialImageForEditor}
+        onSave={handleImageSave}
+      />
     </div>
   );
 }
