@@ -9,7 +9,9 @@ let fabric: any = null;
 const loadFabric = async () => {
   if (!fabric) {
     const fabricModule = await import('fabric');
-    fabric = fabricModule.fabric || fabricModule.default || fabricModule;
+    // Fabric.js v7 exports the main object as default
+    fabric = fabricModule.default || fabricModule;
+    console.log('Fabric loaded:', fabric); // Debug log
   }
   return fabric;
 };
@@ -73,16 +75,24 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
 
   // Load Fabric.js when component mounts
   useEffect(() => {
-    loadFabric().then(() => {
+    console.log('Loading Fabric.js...');
+    loadFabric().then((loadedFabric) => {
+      console.log('Fabric.js loaded successfully:', loadedFabric);
       setFabricLoaded(true);
       setFilterPresets(createFilterPresets());
+    }).catch((error) => {
+      console.error('Failed to load Fabric.js:', error);
     });
   }, []);
 
   // Initialize canvas
   useEffect(() => {
-    if (!isOpen || !canvasRef.current || !fabricLoaded || !fabric) return;
+    if (!isOpen || !canvasRef.current || !fabricLoaded || !fabric) {
+      console.log('Canvas init skipped:', { isOpen, canvasRef: !!canvasRef.current, fabricLoaded, fabric: !!fabric });
+      return;
+    }
 
+    console.log('Initializing Fabric canvas');
     const canvas = new fabric.Canvas(canvasRef.current, {
       width: 800,
       height: 600,
@@ -90,13 +100,16 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
     });
 
     fabricCanvasRef.current = canvas;
+    console.log('Canvas initialized:', canvas);
 
     // Load initial image if provided
     if (initialImage) {
+      console.log('Loading initial image:', initialImage);
       loadImage(initialImage);
     }
 
     return () => {
+      console.log('Disposing canvas');
       canvas.dispose();
       fabricCanvasRef.current = null;
     };
@@ -115,34 +128,66 @@ export default function ImageEditorModal({ isOpen, onClose, initialImage, onSave
 
   // Load image onto canvas
   const loadImage = useCallback((imageSrc: string) => {
-    if (!fabricCanvasRef.current || !fabric) return;
+    if (!fabricCanvasRef.current || !fabric) {
+      console.error('Canvas or Fabric not ready');
+      return;
+    }
 
+    console.log('Loading image:', imageSrc);
     setIsLoading(true);
-    fabric.Image.fromURL(imageSrc, (img: any) => {
-      if (!fabricCanvasRef.current) return;
-
-      // Scale image to fit canvas while maintaining aspect ratio
-      const canvas = fabricCanvasRef.current;
-      const maxWidth = canvas.width! * 0.9;
-      const maxHeight = canvas.height! * 0.9;
-      
-      const scale = Math.min(maxWidth / img.width!, maxHeight / img.height!);
-      img.scale(scale);
-      
-      // Center the image
-      img.set({
-        left: (canvas.width! - img.getScaledWidth()) / 2,
-        top: (canvas.height! - img.getScaledHeight()) / 2,
-      });
-
-      canvas.clear();
-      canvas.add(img);
-      canvas.setActiveObject(img);
-      imageObjectRef.current = img;
-      
-      saveToHistory();
+    
+    // Set a timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      console.error('Image loading timeout');
       setIsLoading(false);
-    }, { crossOrigin: 'anonymous' });
+    }, 10000); // 10 second timeout
+    
+    try {
+      fabric.Image.fromURL(imageSrc, (img: any) => {
+        clearTimeout(loadingTimeout);
+        console.log('Image loaded:', img);
+        if (!fabricCanvasRef.current) {
+          console.error('Canvas ref lost during image load');
+          setIsLoading(false);
+          return;
+        }
+
+        // Scale image to fit canvas while maintaining aspect ratio
+        const canvas = fabricCanvasRef.current;
+        const maxWidth = canvas.width! * 0.9;
+        const maxHeight = canvas.height! * 0.9;
+        
+        const scale = Math.min(maxWidth / img.width!, maxHeight / img.height!);
+        img.scale(scale);
+        
+        // Center the image
+        img.set({
+          left: (canvas.width! - img.getScaledWidth()) / 2,
+          top: (canvas.height! - img.getScaledHeight()) / 2,
+        });
+
+        canvas.clear();
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        imageObjectRef.current = img;
+        
+        saveToHistory();
+        setIsLoading(false);
+        console.log('Image successfully added to canvas');
+      }, { 
+        crossOrigin: 'anonymous',
+        // Add error callback
+        onError: (error: any) => {
+          clearTimeout(loadingTimeout);
+          console.error('Error loading image:', error);
+          setIsLoading(false);
+        }
+      });
+    } catch (error) {
+      clearTimeout(loadingTimeout);
+      console.error('Error in loadImage:', error);
+      setIsLoading(false);
+    }
   }, [saveToHistory]);
 
   // Apply adjustments
