@@ -25,14 +25,9 @@ export default function ImageUploadButton({ onImageSelect, hasImage }: ImageUplo
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        onImageSelect(dataUrl);
-      }
-    };
-    reader.readAsDataURL(file);
+    // Use blob URL instead of data URL for better performance
+    const blobUrl = URL.createObjectURL(file);
+    onImageSelect(blobUrl);
 
     // Reset input
     event.target.value = '';
