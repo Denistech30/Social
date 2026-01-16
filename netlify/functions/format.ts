@@ -5,27 +5,8 @@ const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 15; // 15 requests per minute per IP
 
-// Platform limits
-const PLATFORM_LIMITS = {
-  facebook: 63206, // Very high limit for long-form
-  x: 280,
-  twitter: 280, // alias for x
-  instagram: 2200,
-  threads: 500,
-  linkedin: 3000,
-} as const;
-
-type Platform = keyof typeof PLATFORM_LIMITS;
-
 interface FormatRequest {
   text: string;
-  platform?: Platform;
-  maxChars?: number;
-  options?: {
-    tone?: 'neutral' | 'friendly' | 'professional';
-    keepHashtags?: boolean;
-    keepCTA?: boolean;
-  };
 }
 
 interface HighlightSpan {
@@ -40,10 +21,18 @@ interface FormatBlock {
   highlights?: HighlightSpan[];
 }
 
-interface FormatResponse {
-  cleanText: string;
-  removedPhrases: string[];
+interface SplitPost {
+  platform: string;
+  content: string;
+}
+
+interface FormattedPost {
+  platform: string;
   blocks: FormatBlock[];
+}
+
+interface FormatResponse {
+  results: FormattedPost[];
 }
 
 // Rate limiting helper
@@ -75,92 +64,41 @@ function cleanupRateLimit() {
   }
 }
 
-// Validate FormatResponse structure
-function validateFormatResponse(data: any): data is FormatResponse {
-  if (!data || typeof data !== 'object') return false;
-  
-  // Check required top-level keys
-  if (typeof data.cleanText !== 'string') return false;
-  if (!Array.isArray(data.removedPhrases)) return false;
-  if (!Array.isArray(data.blocks)) return false;
-  
-  // Validate removedPhrases array
-  if (!data.removedPhrases.every((phrase: any) => typeof phrase === 'string')) return false;
-  
-  // Validate blocks array
-  const validBlockTypes = ['heading', 'subheading', 'paragraph', 'bullets', 'numbered', 'cta', 'hashtags', 'separator'];
-  
-  for (const block of data.blocks) {
-    if (!block || typeof block !== 'object') return false;
-    if (!validBlockTypes.includes(block.type)) return false;
-    
-    // Validate block structure based on type
-    if (['bullets', 'numbered', 'hashtags'].includes(block.type)) {
-      if (!Array.isArray(block.items)) return false;
-      if (!block.items.every((item: any) => typeof item === 'string')) return false;
-    } else if (['heading', 'subheading', 'paragraph', 'cta'].includes(block.type)) {
-      if (typeof block.text !== 'string') return false;
-    }
-    // separator type doesn't require text or items
-    
-    // Validate highlights if present
-    if (block.highlights !== undefined) {
-      if (!Array.isArray(block.highlights)) return false;
-      for (const highlight of block.highlights) {
-        if (!highlight || typeof highlight !== 'object') return false;
-        if (typeof highlight.text !== 'string') return false;
-        if (highlight.style !== undefined && !['bold', 'italic', 'underline'].includes(highlight.style)) return false;
-      }
-    }
-  }
-  
-  return true;
-}
-
-// Estimate character count from format response
-function estimateCharacterCount(formatResponse: FormatResponse): number {
-  let totalChars = formatResponse.cleanText.length;
-  
-  // Add estimated characters from blocks
-  for (const block of formatResponse.blocks) {
-    if (block.text) {
-      totalChars += block.text.length + 2; // +2 for line breaks
-    }
-    if (block.items) {
-      totalChars += block.items.reduce((sum, item) => sum + item.length + 3, 0); // +3 for bullet/number + space + line break
-    }
-  }
-  
-  return totalChars;
-}
-
-// STEP 1: Call Groq API to clean the text (remove meta-talk)
-async function callGroqCleanerAPI(rawText: string): Promise<{ cleanedText: string; removedPhrases: string[] }> {
+// STEP 1: SPLITTER - Classify and split multi-post content
+async function callGroqSplitterAPI(rawText: string): Promise<SplitPost[]> {
   const groqApiKey = process.env.GROQ_API_KEY;
   
   if (!groqApiKey) {
     throw new Error('GROQ_API_KEY environment variable not set');
   }
 
-  const systemMessage = `You are a Text Extractor. Your ONLY job is to return the core social media post content from the user input.
+  const systemMessage = `You are a Social Media Content Classifier.
 
-RULES:
-- REMOVE all conversational filler such as:
-  * "Sure", "Here is the post", "Here's your post", "Here you go"
-  * "I hope this helps", "Let me know if you need changes"
-  * "As an AI", "I can help", "I'd be happy to"
-  * "The post starts here", "The post ends here"
-  * Any meta-commentary about the post itself
-- If the text is already clean (no filler), return it EXACTLY as is
-- Do NOT rewrite, paraphrase, or modify the actual post content
-- Do NOT add or remove hashtags, emojis, or formatting
-- Output ONLY the cleaned text
+1. ANALYZE input: Does it contain MULTIPLE distinct posts (e.g., 'Facebook Version', 'Option 1')?
+   - NO: It's a single post (even if long).
+   - YES: It has clear headers like 'Twitter:', 'For LinkedIn:', or 'Option A:'.
 
-Return a JSON object:
+2. IGNORE: Remove conversational filler ('Sure!', 'Here is the draft') and non-post instructions ('Image Prompt', 'Poster Gen').
+
+3. EXTRACT: Return an array of posts.
+   - If Single: Return 1 item with platform="General".
+   - If Multi: Split by platform. Remove platform headers from content.
+   - If user provides Image Prompts, IGNORE them.
+
+OUTPUT JSON SCHEMA:
 {
-  "cleanedText": "the extracted post content",
-  "removedPhrases": ["list of phrases that were removed"]
-}`;
+  "posts": [
+    { "platform": "Facebook", "content": "..." },
+    { "platform": "X (Twitter)", "content": "..." }
+  ]
+}
+
+PLATFORM DETECTION RULES:
+- Look for headers like: "Facebook:", "Twitter:", "X:", "LinkedIn:", "Instagram:", "Threads:"
+- Look for variations like: "For Facebook", "Facebook Version", "Option 1 (Facebook)"
+- If no platform headers found, return single post with platform="General"
+- Remove the platform header from the content itself
+- Preserve all actual post content exactly as written`;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -177,11 +115,11 @@ Return a JSON object:
         },
         {
           role: 'user',
-          content: `Extract the core post content from this text:\n\n${rawText}`
+          content: rawText
         }
       ],
-      temperature: 0.1, // Low temperature for consistent extraction
-      max_tokens: 1000,
+      temperature: 0.1,
+      max_tokens: 2000,
       response_format: {
         type: "json_object"
       }
@@ -190,148 +128,112 @@ Return a JSON object:
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.error('Groq Cleaner API Error:', {
+    console.error('Groq Splitter API Error:', {
       status: response.status,
       statusText: response.statusText,
       error: errorData
     });
-    throw new Error(`Groq Cleaner API returned ${response.status}: ${response.statusText}`);
+    throw new Error(`Groq Splitter API returned ${response.status}: ${response.statusText}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
   
   if (!content) {
-    console.error('No content in Groq cleaner response:', data);
-    throw new Error('No content returned from Groq Cleaner API');
+    console.error('No content in Groq splitter response:', data);
+    throw new Error('No content returned from Groq Splitter API');
   }
 
   try {
     const parsedResponse = JSON.parse(content);
     
     // Validate the response structure
-    if (typeof parsedResponse.cleanedText !== 'string') {
-      throw new Error('Invalid cleaner response: missing cleanedText');
+    if (!Array.isArray(parsedResponse.posts)) {
+      throw new Error('Invalid splitter response: missing posts array');
     }
     
-    return {
-      cleanedText: parsedResponse.cleanedText,
-      removedPhrases: Array.isArray(parsedResponse.removedPhrases) ? parsedResponse.removedPhrases : []
-    };
+    // If no posts found, return single post with original text
+    if (parsedResponse.posts.length === 0) {
+      return [{ platform: 'General', content: rawText }];
+    }
+    
+    // Validate each post
+    for (const post of parsedResponse.posts) {
+      if (!post.platform || typeof post.platform !== 'string') {
+        throw new Error('Invalid post: missing platform');
+      }
+      if (!post.content || typeof post.content !== 'string') {
+        throw new Error('Invalid post: missing content');
+      }
+    }
+    
+    return parsedResponse.posts;
   } catch (parseError) {
-    console.error('Failed to parse Groq cleaner JSON response:', content);
-    throw new Error('Invalid JSON response from Groq Cleaner API');
+    console.error('Failed to parse Groq splitter JSON response:', content);
+    // Fallback: return original text as single post
+    return [{ platform: 'General', content: rawText }];
   }
 }
 
-// STEP 2: Call Groq API to format the cleaned text
-async function callGroqFormatterAPI(cleanedText: string, isRetry: boolean = false): Promise<{ blocks: FormatBlock[] }> {
+// STEP 2: FORMATTER - Format each post individually
+async function callGroqFormatterAPI(postContent: string, isRetry: boolean = false): Promise<{ blocks: FormatBlock[] }> {
   const groqApiKey = process.env.GROQ_API_KEY;
   
   if (!groqApiKey) {
     throw new Error('GROQ_API_KEY environment variable not set');
   }
 
-  const systemMessage = `You are a Creative Social Media Formatter. Your job is to format the provided text into structured blocks with proper styling and highlighting.
+  const systemMessage = `You are a Text Formatter.
 
-### INSTRUCTIONS
+- Style: Use Markdown bold (**text**) for Headings and Keys (Names, Brands).
+- Do NOT use fancy unicode. The frontend handles that.
+- Do NOT rewrite content.
+- OUTPUT: JSON with "blocks" array.
 
-1. **Analyze Structure (Block Level):**
-   - Detect **Headings**: Main titles or topic changes. (Label as 'heading')
-   - Detect **Subheadings**: Section dividers. (Label as 'subheading')
-   - Detect **Lists**: Any lines that look like points, bullets, or steps. (Label as 'bullets' or 'numbered')
-   - Detect **CTAs**: Call-to-action phrases. (Label as 'cta')
-   - Detect **Hashtags**: Group hashtags together. (Label as 'hashtags')
-   - Detect **Standard Text**: Everything else. (Label as 'paragraph')
+### BLOCK TYPES:
+- "heading": Main title or strong hook line
+- "subheading": Section labels like "Problem:", "Solution:", "Benefits:"
+- "paragraph": Normal body text
+- "bullets": Multiple related items (tips, features, benefits)
+- "numbered": Step-by-step or ordered processes
+- "cta": Call-to-action phrases (comment, like, share, DM, etc.)
+- "hashtags": Group all hashtags together
+- "separator": Visual breaks between sections (use sparingly)
 
-2. **Apply Inline Highlighting (Word Level):**
-   - IDENTIFY: Names of people, Brand names, Monetary values (e.g., $500), and 'Sensitive/Impact' keywords (e.g., 'Warning', 'Important', 'Deadline').
-   - ACTION: Mark these specific words in the highlights array with their exact text from the content.
-
-3. **Strict Constraints:**
-   - **DO NOT REWRITE:** Output the exact wording provided.
-   - **DO NOT HALLUCINATE:** Do not add emojis or punctuation that isn't there.
-   - **DO NOT REORDER:** Keep the blocks in the exact order of the input text.
-
-### OUTPUT FORMAT
-Return a JSON object:
+### OUTPUT FORMAT:
 {
-  "blocks": Array<
-    | {
-        "type": "heading" | "subheading" | "paragraph" | "cta";
-        "text": string;
-        "highlights"?: { "text": string; "style"?: "bold" | "italic" | "underline" }[];
-      }
-    | {
-        "type": "bullets" | "numbered" | "hashtags";
-        "items": string[];
-        "highlights"?: { "text": string; "style"?: "bold" | "italic" | "underline" }[];
-      }
-    | {
-        "type": "separator";
-      }
-  >
+  "blocks": [
+    {
+      "type": "heading" | "subheading" | "paragraph" | "cta",
+      "text": string,
+      "highlights"?: [{ "text": string, "style"?: "bold" | "italic" | "underline" }]
+    },
+    {
+      "type": "bullets" | "numbered" | "hashtags",
+      "items": string[],
+      "highlights"?: [{ "text": string, "style"?: "bold" | "italic" | "underline" }]
+    },
+    {
+      "type": "separator"
+    }
+  ]
 }
 
-### BLOCK RULES:
-- "heading": Main title or strong hook line from the text.
-- "subheading": Section labels like "Problem:", "Solution:", "Benefits:", etc.
-- "paragraph": Normal body text.
-- "bullets": Multiple related items (tips, features, benefits) - preserve exact wording.
-- "numbered": Step-by-step or ordered processes - preserve exact wording.
-- "cta": Call-to-action phrases (comment, like, share, DM, sign up, etc.).
-- "hashtags": Group all hashtags together, preserving each exactly.
-- "separator": Visual breaks between sections (use sparingly).
-
 ### HIGHLIGHTS:
-- Identify important entities and keywords within each block's text or items.
-- Good candidates:
-  - Person names (creators, experts, authors)
-  - Brand names and product names
-  - Platform names (Facebook, TikTok, X, LinkedIn, Instagram, YouTube, etc.)
-  - Monetary values ($500, €100, etc.)
-  - Dates, times, locations
-  - Impact keywords (Warning, Important, Deadline, Limited, Free, New, etc.)
-- Each highlight: { "text": string, "style"?: "bold" | "italic" | "underline" }
-- "text" must be an exact substring from the block's content.
-- Default style is "bold" if not specified.
+- Identify important entities: Person names, Brand names, Platform names, Monetary values, Impact keywords
+- Add to highlights array with exact text from content
+- Default style is "bold"
 
 ### CRITICAL:
-- The text provided is CLEAN. Do not try to remove or clean anything.
-- Output must contain 100% of the input text, just organized into blocks.
-- Do NOT add any extra keys to the JSON beyond those described above.`;
+- Preserve 100% of input text wording
+- Do NOT rewrite, paraphrase, or add content
+- Keep blocks in same order as input`;
 
-  const userMessage = `STRUCTURE DETECTION TASK: Analyze the provided text and organize it into formatting blocks. The text is CLEAN - do not remove or rewrite anything.
+  const userMessage = `Format this social media post into structured blocks with highlights:
 
-INSTRUCTIONS:
-1. **Detect Structure:**
-   - Identify headings (main titles or topic changes)
-   - Identify subheadings (section labels like "Problem:", "Solution:", "Benefits:")
-   - Identify lists (any points, bullets, or steps)
-   - Identify CTAs (call-to-action phrases)
-   - Identify hashtags (group them together)
-   - Everything else is a paragraph
+${postContent}
 
-2. **Highlight Important Entities:**
-   - Within each block, identify and mark:
-     * Person names
-     * Brand names
-     * Monetary values ($500, €100, etc.)
-     * Platform names (Facebook, LinkedIn, Instagram, etc.)
-     * Impact keywords (Warning, Important, Deadline, Limited, Free, etc.)
-   - Add these to the highlights array with their exact text
-
-3. **Strict Rules:**
-   - Use the EXACT wording from the input
-   - Do NOT rewrite, paraphrase, or summarize
-   - Do NOT add emojis or punctuation
-   - Do NOT reorder the content
-   - Keep blocks in the same order as the input
-
-INPUT TEXT:
-${cleanedText}
-
-Return ONLY the JSON object as specified in the system message.`;
+Return ONLY the JSON object with "blocks" array.`;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -349,12 +251,12 @@ Return ONLY the JSON object as specified in the system message.`;
         {
           role: 'user',
           content: isRetry 
-            ? `Your previous response was invalid. Return ONLY a single JSON object with a "blocks" array.\n\n${userMessage}`
+            ? `Your previous response was invalid. ${userMessage}`
             : userMessage
         }
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 1500,
       response_format: {
         type: "json_object"
       }
@@ -518,11 +420,11 @@ export const handler: Handler = async (event) => {
     }
 
     // Validate text length (prevent abuse)
-    if (requestData.text.length > 8000) {
+    if (requestData.text.length > 10000) {
       return {
         statusCode: 400,
         headers: corsHeaders,
-        body: JSON.stringify({ error: 'Text too long. Maximum 8000 characters allowed.' }),
+        body: JSON.stringify({ error: 'Text too long. Maximum 10000 characters allowed.' }),
       };
     }
 
@@ -534,86 +436,98 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    // TWO-STEP PIPELINE: Clean then Format
-    console.log('Starting two-step format pipeline...');
+    // TWO-STEP PIPELINE: Split then Format
+    console.log('Starting multi-split format pipeline...');
     
-    // STEP 1: Clean the text (remove meta-talk)
-    console.log('Step 1: Cleaning text...');
-    let cleanedText: string;
-    let removedPhrases: string[];
+    // STEP 1: Split the text into posts
+    console.log('Step 1: Splitting text into posts...');
+    let posts: SplitPost[];
     
     try {
-      const cleanerResult = await callGroqCleanerAPI(requestData.text);
-      cleanedText = cleanerResult.cleanedText;
-      removedPhrases = cleanerResult.removedPhrases;
-      console.log('Text cleaned successfully:', {
+      posts = await callGroqSplitterAPI(requestData.text);
+      console.log('Text split successfully:', {
         originalLength: requestData.text.length,
-        cleanedLength: cleanedText.length,
-        removedPhrasesCount: removedPhrases.length
+        postsCount: posts.length,
+        platforms: posts.map(p => p.platform)
       });
-    } catch (cleanerError) {
-      console.error('Cleaner API call failed:', cleanerError);
+    } catch (splitterError) {
+      console.error('Splitter API call failed:', splitterError);
       return {
         statusCode: 503,
         headers: corsHeaders,
         body: JSON.stringify({ 
-          error: 'AI text cleaning service temporarily unavailable. Please try again later.',
-          details: cleanerError instanceof Error ? cleanerError.message : 'Unknown error'
+          error: 'AI text splitting service temporarily unavailable. Please try again later.',
+          details: splitterError instanceof Error ? splitterError.message : 'Unknown error'
         }),
       };
     }
 
-    // STEP 2: Format the cleaned text
-    console.log('Step 2: Formatting cleaned text...');
-    let blocks: FormatBlock[];
+    // STEP 2: Format each post in parallel
+    console.log('Step 2: Formatting each post...');
     
     try {
-      const formatterResult = await callGroqFormatterAPI(cleanedText);
-      blocks = formatterResult.blocks;
-      console.log('Text formatted successfully:', {
-        blocksCount: blocks.length
+      const formattedResults = await Promise.all(
+        posts.map(async (post) => {
+          try {
+            const formatResult = await callGroqFormatterAPI(post.content);
+            return {
+              platform: post.platform,
+              blocks: formatResult.blocks
+            };
+          } catch (formatError) {
+            console.error(`Formatter failed for ${post.platform}, retrying...`, formatError);
+            // Retry once
+            try {
+              const retryResult = await callGroqFormatterAPI(post.content, true);
+              return {
+                platform: post.platform,
+                blocks: retryResult.blocks
+              };
+            } catch (retryError) {
+              console.error(`Retry failed for ${post.platform}:`, retryError);
+              // Return a fallback paragraph block with the original content
+              return {
+                platform: post.platform,
+                blocks: [
+                  {
+                    type: 'paragraph' as const,
+                    text: post.content
+                  }
+                ]
+              };
+            }
+          }
+        })
+      );
+
+      const formatResponse: FormatResponse = {
+        results: formattedResults
+      };
+
+      console.log('Multi-split format pipeline completed successfully:', {
+        originalLength: requestData.text.length,
+        postsCount: formatResponse.results.length,
+        platforms: formatResponse.results.map(r => r.platform),
+        totalBlocks: formatResponse.results.reduce((sum, r) => sum + r.blocks.length, 0)
       });
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify(formatResponse),
+      };
+
     } catch (formatterError) {
-      console.error('Formatter API call failed:', formatterError);
-      
-      // Retry once with stricter prompt
-      try {
-        console.log('Retrying formatter with stricter prompt...');
-        const retryResult = await callGroqFormatterAPI(cleanedText, true);
-        blocks = retryResult.blocks;
-      } catch (retryError) {
-        console.error('Retry Formatter API call failed:', retryError);
-        return {
-          statusCode: 503,
-          headers: corsHeaders,
-          body: JSON.stringify({ 
-            error: 'AI formatting service temporarily unavailable. Please try again later.',
-            details: retryError instanceof Error ? retryError.message : 'Unknown error'
-          }),
-        };
-      }
+      console.error('Formatter API calls failed:', formatterError);
+      return {
+        statusCode: 503,
+        headers: corsHeaders,
+        body: JSON.stringify({ 
+          error: 'AI formatting service temporarily unavailable. Please try again later.',
+          details: formatterError instanceof Error ? formatterError.message : 'Unknown error'
+        }),
+      };
     }
-
-    // Combine results
-    const formatResult: FormatResponse = {
-      cleanText: cleanedText,
-      removedPhrases: removedPhrases,
-      blocks: blocks
-    };
-
-    console.log('Format pipeline completed successfully:', {
-      originalLength: requestData.text.length,
-      cleanedLength: formatResult.cleanText.length,
-      blocksCount: formatResult.blocks.length,
-      removedPhrasesCount: formatResult.removedPhrases.length,
-      estimatedFinalLength: estimateCharacterCount(formatResult)
-    });
-
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: JSON.stringify(formatResult),
-    };
 
   } catch (error) {
     console.error('Function error:', error);

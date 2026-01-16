@@ -12,10 +12,13 @@ export interface FormatBlock {
   highlights?: HighlightSpan[];
 }
 
-export interface FormatResponse {
-  cleanText: string;
-  removedPhrases: string[];
+export interface FormattedPost {
+  platform: string;
   blocks: FormatBlock[];
+}
+
+export interface FormatResponse {
+  results: FormattedPost[];
 }
 
 /**
@@ -158,26 +161,14 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
  * Calls the AI format API
  */
 export async function callAIFormatAPI(
-  text: string, 
-  platform?: string, 
-  maxChars?: number,
-  options?: {
-    tone?: 'neutral' | 'friendly' | 'professional';
-    keepHashtags?: boolean;
-    keepCTA?: boolean;
-  }
+  text: string
 ): Promise<FormatResponse> {
   const response = await fetch('/api/format', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      text,
-      platform: platform || 'facebook',
-      maxChars,
-      options
-    }),
+    body: JSON.stringify({ text }),
   });
 
   if (!response.ok) {

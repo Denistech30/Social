@@ -101,13 +101,16 @@ export interface FormatBlock {
   type: 'heading' | 'subheading' | 'paragraph' | 'bullets' | 'numbered' | 'cta' | 'hashtags' | 'separator';
   text?: string;
   items?: string[];
-  highlights?: HighlightSpan[]; // NEW
+  highlights?: HighlightSpan[];
+}
+
+export interface FormattedPost {
+  platform: string;
+  blocks: FormatBlock[];
 }
 
 export interface FormatResponse {
-  cleanText: string;
-  removedPhrases: string[];
-  blocks: FormatBlock[];
+  results: FormattedPost[]; // Array of formatted posts
 }
 
 // Image Editor types

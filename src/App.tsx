@@ -367,25 +367,23 @@ function App() {
     setOriginalTextForUndo(inputText); // Save for undo
 
     try {
-      const selectedPlatform = getPlatformById(selectedPlatformId);
-      const platformName = selectedPlatform?.id === 'twitter' ? 'x' : selectedPlatform?.id;
-      
-      const formatResult = await callAIFormatAPI(
-        inputText,
-        platformName || 'facebook',
-        selectedPlatform?.charLimit,
-        {
-          tone: 'neutral',
-          keepHashtags: true,
-          keepCTA: true
-        }
-      );
+      const formatResult = await callAIFormatAPI(inputText);
 
-      // Render blocks into formatted text
-      const formattedOutput = renderFormatBlocks(formatResult.blocks);
-      
-      // Update the input text with formatted result
-      handleInputChange(formattedOutput);
+      // Check if we have multiple posts
+      if (formatResult.results.length > 1) {
+        // Multiple posts detected - show all versions
+        const allVersions = formatResult.results.map((post, index) => {
+          const formattedOutput = renderFormatBlocks(post.blocks);
+          const platformLabel = post.platform === 'General' ? `Version ${index + 1}` : post.platform;
+          return `━━━ ${platformLabel} ━━━\n\n${formattedOutput}`;
+        }).join('\n\n\n');
+        
+        handleInputChange(allVersions);
+      } else {
+        // Single post - render normally
+        const formattedOutput = renderFormatBlocks(formatResult.results[0].blocks);
+        handleInputChange(formattedOutput);
+      }
       
       // Show success message with undo option
       showToastMessage('Text formatted successfully!', 'success');
