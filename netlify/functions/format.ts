@@ -186,20 +186,31 @@ async function callGroqFormatterAPI(postContent: string, isRetry: boolean = fals
   const systemMessage = `You are a TEXT-PRESERVING FORMATTER.
 
 YOUR GOAL:
-- You must output the user's text EXACTLY, character-for-character.
+- Output user text EXACTLY, character-for-character.
 - Your ONLY allowed change is to identify structure (blocks) and mark important terms in highlights array.
+
+CRITICAL VISUAL RULES (MUST FOLLOW):
+1. NO COMBINING CHARACTERS: Do NOT use combining underlines (U+0332), combining strikethroughs, combining accents, or any Unicode combining diacritical marks. These break the UI and render as question marks.
+2. NO FANCY UNICODE: Do NOT use 𝐁𝐨𝐥𝐝, 𝐼𝑡𝑎𝑙𝑖𝑐, 𝒮𝒸𝓇𝒾𝓅𝓉, or any mathematical alphanumeric symbols.
+3. PLAIN TEXT ONLY: Use standard A-Z, a-z, 0-9 characters. The frontend handles all styling.
+4. NO VISUAL EFFECTS: Do NOT try to create underlines, strikethroughs, or other effects using Unicode tricks.
+
+EXAMPLES OF WHAT NOT TO DO:
+❌ WRONG: "T̲h̲e̲ ̲P̲l̲a̲n̲" (combining underlines - causes question marks)
+❌ WRONG: "𝐓𝐡𝐞 𝐏𝐥𝐚𝐧" (bold unicode - not needed)
+❌ WRONG: "T̶h̶e̶ ̶P̶l̶a̶n̶" (combining strikethrough - breaks UI)
+✅ CORRECT: "The Plan" (plain text - frontend will style it)
 
 CRITICAL RULES (DO NOT BREAK):
 1. NEVER censor text.
 2. NEVER replace text with question marks (?), diamonds (◆), or other symbols.
 3. NEVER delete "garbage" or "weird" sentences. If you don't understand a sentence, OUTPUT IT EXACTLY AS IS.
-4. If the input contains emojis or foreign characters, PRESERVE them.
-5. Do NOT use fancy unicode (like 𝐁𝐨𝐥𝐝). The frontend handles styling.
-6. Do NOT rewrite, paraphrase, or "fix" the text.
+4. If the input contains emojis or foreign characters, PRESERVE them exactly.
+5. Do NOT rewrite, paraphrase, or "fix" the text.
 
 HALLUCINATION CHECK:
 - If you are unsure what to highlight, do NOT add highlights. Just return the plain text block.
-- It is better to return plain text than to return question marks or corrupted text.
+- It is better to return plain text than to return corrupted text with combining characters.
 - When in doubt, default to "paragraph" type with the exact text.
 
 BLOCK TYPES:
@@ -235,18 +246,26 @@ HIGHLIGHTS (OPTIONAL):
 - Only add highlights if you're confident about important entities
 - Good candidates: Person names, Brand names, Platform names, Monetary values, Impact keywords
 - Add to highlights array with EXACT text from content (must be exact substring)
+- The "style" field is just metadata - do NOT modify the actual text
 - Default style is "bold"
 - If unsure, skip highlights entirely
 
-REMEMBER: Preserving the user's exact text is MORE IMPORTANT than perfect formatting.`;
+REMEMBER: 
+- Preserving the user's exact text is MORE IMPORTANT than perfect formatting.
+- Use PLAIN TEXT ONLY - no combining characters, no fancy unicode.
+- The frontend will handle all visual styling (bold, italic, underline).`;
 
   const userMessage = `Format this social media post into structured blocks.
 
-CRITICAL: Output the text EXACTLY as provided. Do NOT replace any characters with question marks or symbols.
+CRITICAL WARNINGS:
+1. Output the text EXACTLY as provided - use PLAIN TEXT ONLY
+2. Do NOT use combining characters (U+0332, U+0336, etc.) - they render as question marks
+3. Do NOT use fancy Unicode (𝐁𝐨𝐥𝐝, 𝐼𝑡𝑎𝑙𝑖𝑐, etc.) - frontend handles styling
+4. Do NOT try to create visual effects with Unicode tricks
 
 ${postContent}
 
-Return ONLY the JSON object with "blocks" array. If you're unsure about any text, use type "paragraph" with the exact text.`;
+Return ONLY the JSON object with "blocks" array using plain A-Z text. If you're unsure about any text, use type "paragraph" with the exact text.`;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
