@@ -183,24 +183,36 @@ async function callGroqFormatterAPI(postContent: string, isRetry: boolean = fals
     throw new Error('GROQ_API_KEY environment variable not set');
   }
 
-  const systemMessage = `You are a Text Formatter.
+  const systemMessage = `You are a TEXT-PRESERVING FORMATTER.
 
-- Style: Use Markdown bold (**text**) for Headings and Keys (Names, Brands).
-- Do NOT use fancy unicode. The frontend handles that.
-- Do NOT rewrite content.
-- OUTPUT: JSON with "blocks" array.
+YOUR GOAL:
+- You must output the user's text EXACTLY, character-for-character.
+- Your ONLY allowed change is to identify structure (blocks) and mark important terms in highlights array.
 
-### BLOCK TYPES:
+CRITICAL RULES (DO NOT BREAK):
+1. NEVER censor text.
+2. NEVER replace text with question marks (?), diamonds (◆), or other symbols.
+3. NEVER delete "garbage" or "weird" sentences. If you don't understand a sentence, OUTPUT IT EXACTLY AS IS.
+4. If the input contains emojis or foreign characters, PRESERVE them.
+5. Do NOT use fancy unicode (like 𝐁𝐨𝐥𝐝). The frontend handles styling.
+6. Do NOT rewrite, paraphrase, or "fix" the text.
+
+HALLUCINATION CHECK:
+- If you are unsure what to highlight, do NOT add highlights. Just return the plain text block.
+- It is better to return plain text than to return question marks or corrupted text.
+- When in doubt, default to "paragraph" type with the exact text.
+
+BLOCK TYPES:
 - "heading": Main title or strong hook line
 - "subheading": Section labels like "Problem:", "Solution:", "Benefits:"
-- "paragraph": Normal body text
+- "paragraph": Normal body text (DEFAULT - use this when unsure)
 - "bullets": Multiple related items (tips, features, benefits)
 - "numbered": Step-by-step or ordered processes
 - "cta": Call-to-action phrases (comment, like, share, DM, etc.)
 - "hashtags": Group all hashtags together
 - "separator": Visual breaks between sections (use sparingly)
 
-### OUTPUT FORMAT:
+OUTPUT FORMAT:
 {
   "blocks": [
     {
@@ -219,21 +231,22 @@ async function callGroqFormatterAPI(postContent: string, isRetry: boolean = fals
   ]
 }
 
-### HIGHLIGHTS:
-- Identify important entities: Person names, Brand names, Platform names, Monetary values, Impact keywords
-- Add to highlights array with exact text from content
+HIGHLIGHTS (OPTIONAL):
+- Only add highlights if you're confident about important entities
+- Good candidates: Person names, Brand names, Platform names, Monetary values, Impact keywords
+- Add to highlights array with EXACT text from content (must be exact substring)
 - Default style is "bold"
+- If unsure, skip highlights entirely
 
-### CRITICAL:
-- Preserve 100% of input text wording
-- Do NOT rewrite, paraphrase, or add content
-- Keep blocks in same order as input`;
+REMEMBER: Preserving the user's exact text is MORE IMPORTANT than perfect formatting.`;
 
-  const userMessage = `Format this social media post into structured blocks with highlights:
+  const userMessage = `Format this social media post into structured blocks.
+
+CRITICAL: Output the text EXACTLY as provided. Do NOT replace any characters with question marks or symbols.
 
 ${postContent}
 
-Return ONLY the JSON object with "blocks" array.`;
+Return ONLY the JSON object with "blocks" array. If you're unsure about any text, use type "paragraph" with the exact text.`;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
