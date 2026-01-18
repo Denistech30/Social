@@ -22,7 +22,17 @@ export interface FormatResponse {
 }
 
 /**
- * Applies highlights to a text string
+ * Processes markdown stars (**text**) and converts to Unicode bold
+ */
+function processMarkdownStars(text: string): string {
+  // Replace **text** with Unicode bold text
+  return text.replace(/\*\*([^*]+)\*\*/g, (_, content) => {
+    return convertToBold(content);
+  });
+}
+
+/**
+ * Applies highlights to a text string (legacy support)
  */
 function applyHighlights(text: string, highlights?: HighlightSpan[]): string {
   if (!highlights || highlights.length === 0) {
@@ -74,34 +84,38 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
     switch (block.type) {
       case 'heading':
         if (block.text) {
-          // Apply highlights first, then extra bold for main headings
-          const highlightedText = applyHighlights(block.text, block.highlights);
-          renderedParts.push(convertToExtraBold(highlightedText.toUpperCase()));
+          // Process markdown stars first, then apply highlights (if any), then extra bold for main headings
+          let processedText = processMarkdownStars(block.text);
+          processedText = applyHighlights(processedText, block.highlights);
+          renderedParts.push(convertToExtraBold(processedText.toUpperCase()));
         }
         break;
 
       case 'subheading':
         if (block.text) {
-          // Apply highlights first, then bold with underline for subheadings
-          const highlightedText = applyHighlights(block.text, block.highlights);
-          renderedParts.push(addUnderline(convertToBold(highlightedText)));
+          // Process markdown stars first, then apply highlights, then bold with underline for subheadings
+          let processedText = processMarkdownStars(block.text);
+          processedText = applyHighlights(processedText, block.highlights);
+          renderedParts.push(addUnderline(convertToBold(processedText)));
         }
         break;
 
       case 'paragraph':
         if (block.text) {
-          // Apply highlights to paragraphs, keep as plain text with proper spacing
-          const highlightedText = applyHighlights(block.text, block.highlights);
-          renderedParts.push(highlightedText);
+          // Process markdown stars first, then apply highlights to paragraphs
+          let processedText = processMarkdownStars(block.text);
+          processedText = applyHighlights(processedText, block.highlights);
+          renderedParts.push(processedText);
         }
         break;
 
       case 'bullets':
         if (block.items && block.items.length > 0) {
-          // Apply highlights to each bullet item
+          // Process markdown stars and apply highlights to each bullet item
           const bulletList = block.items.map(item => {
-            const highlightedItem = applyHighlights(item, block.highlights);
-            return `• ${highlightedItem}`;
+            let processedItem = processMarkdownStars(item);
+            processedItem = applyHighlights(processedItem, block.highlights);
+            return `• ${processedItem}`;
           }).join('\n');
           renderedParts.push(bulletList);
         }
@@ -109,10 +123,11 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
 
       case 'numbered':
         if (block.items && block.items.length > 0) {
-          // Apply highlights to each numbered item
+          // Process markdown stars and apply highlights to each numbered item
           const numberedList = block.items.map((item, index) => {
-            const highlightedItem = applyHighlights(item, block.highlights);
-            return `${index + 1}. ${highlightedItem}`;
+            let processedItem = processMarkdownStars(item);
+            processedItem = applyHighlights(processedItem, block.highlights);
+            return `${index + 1}. ${processedItem}`;
           }).join('\n');
           renderedParts.push(numberedList);
         }
@@ -120,18 +135,20 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
 
       case 'cta':
         if (block.text) {
-          // Apply highlights first, then make CTA bold to stand out
-          const highlightedText = applyHighlights(block.text, block.highlights);
-          renderedParts.push(convertToBold(highlightedText));
+          // Process markdown stars first, then apply highlights, then make CTA bold
+          let processedText = processMarkdownStars(block.text);
+          processedText = applyHighlights(processedText, block.highlights);
+          renderedParts.push(convertToBold(processedText));
         }
         break;
 
       case 'hashtags':
         if (block.items && block.items.length > 0) {
-          // Apply highlights to hashtags, join on one line
+          // Process markdown stars and apply highlights to hashtags
           const highlightedHashtags = block.items.map(tag => {
             const properTag = tag.startsWith('#') ? tag : `#${tag}`;
-            return applyHighlights(properTag, block.highlights);
+            let processedTag = processMarkdownStars(properTag);
+            return applyHighlights(processedTag, block.highlights);
           });
           const hashtagLine = highlightedHashtags.join(' ');
           renderedParts.push(hashtagLine);
@@ -146,8 +163,9 @@ export function renderFormatBlocks(blocks: FormatBlock[]): string {
       default:
         // Fallback for unknown block types
         if (block.text) {
-          const highlightedText = applyHighlights(block.text, block.highlights);
-          renderedParts.push(highlightedText);
+          let processedText = processMarkdownStars(block.text);
+          processedText = applyHighlights(processedText, block.highlights);
+          renderedParts.push(processedText);
         }
         break;
     }
